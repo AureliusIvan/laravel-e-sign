@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('dosen', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(User::class);
             $table->string('nid', 20)->unique();
             $table->string('nama');

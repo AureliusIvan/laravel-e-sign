@@ -168,7 +168,8 @@ CREATE TABLE `berita_acara` (
 --
 
 INSERT INTO `berita_acara` (`id`, `uuid`, `tahun_ajaran_id`, `program_studi_id`, `dosen_id`, `tanggal_awal`, `tanggal_akhir`, `isi_berita`, `created_at`, `updated_at`) VALUES
-(1, 'eac83a7e-85c5-49f8-bd67-26aafcc03373', 1, 1, 1, '2024-08-17', '2024-08-17', 'Isi berita acara pertama', '2024-08-16 02:04:27', '2024-08-16 03:11:59'),
+(1, 'eac83a7e-85c5-49f8-bd67-26aafcc03373', 1, 1, 1, '' ||
+                                                     '2024-08-17', '2024-08-17', 'Isi berita acara pertama', '2024-08-16 02:04:27', '2024-08-16 03:11:59'),
 (3, 'bff7c0c5-c5ef-4c54-91ec-7a65b7a5aa60', 1, 1, 1, '2024-08-18', '2024-08-20', 'Cari Pembimbing', '2024-08-17 22:52:17', '2024-08-17 22:52:17');
 
 -- --------------------------------------------------------

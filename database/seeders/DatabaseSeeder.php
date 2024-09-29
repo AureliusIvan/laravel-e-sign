@@ -8,6 +8,7 @@ use App\Models\Admin;
 use App\Models\Dosen;
 use App\Models\Mahasiswa;
 use Illuminate\Support\Str;
+
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use App\Models\ProgramStudi;
 use App\Models\TahunAjaran;
@@ -30,7 +31,7 @@ class DatabaseSeeder extends Seeder
 
         //     $user = User::create([
         //         'email' => 'dosen1@umn.ac.id',
-        //         'password' => Hash::make('password'),
+            //         'password' => Hash::make('password'),
         //         'role' => 'dosen',
         //     ]);
 
@@ -276,5 +277,23 @@ class DatabaseSeeder extends Seeder
         //         'angkatan' => 2020,
         //     ]);
         // });
+
+        // create admin
+        DB::transaction(function () {
+            DB::table('users')->lockForUpdate()->get();
+
+            $user = User::create([
+                'email' => 'admin2@umn.ac.id',
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+            ]);
+
+            $lastUserId = $user->id;
+
+            Admin::create([
+                'user_id' => $lastUserId,
+                'nama' => 'Admin 2',
+            ]);
+        });
     }
 }
