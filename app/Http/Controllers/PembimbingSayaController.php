@@ -5,10 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Dosen;
 use App\Models\Mahasiswa;
 use App\Models\PembimbingMahasiswa;
+use App\Models\Pengaturan;
+use App\Models\ProposalSkripsi;
+use App\Models\ProposalSkripsiForm;
 use App\Models\TahunAjaran;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use function Symfony\Component\VarDumper\Dumper\esc;
+use setasign\Fpdi\Fpdi;
+use setasign\Fpdi\PdfParser\StreamReader;
+use Smalot\PdfParser\Parser;
+use setasign\Fpdi\PdfParser\Type\PdfDictionary;
+
 
 class PembimbingSayaController extends Controller
 {

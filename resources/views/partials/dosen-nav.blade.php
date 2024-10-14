@@ -56,7 +56,7 @@
                         </p>
                     </a>
                 </li>
-                
+
                 <!-- Topik Penelitian Saya -->
                 <li class="nav-item">
                     <a href="{{ route('topik.penelitian.saya') }}"
@@ -110,6 +110,22 @@
                         </p>
                     </a>
                 </li>
+
+                <a href="{{ route('verify') }}"
+                   class="nav-link {{ ($title === 'Periksa Proposal') ? 'active' : '' }}">
+                    <i class="nav-icon fas fa-file"></i>
+                    <p>
+                        Verifikasi Proposal
+                    </p>
+                </a>
+
+                <a href="{{ route('check.thesis') }}"
+                   class="nav-link {{ ($title === 'Periksa Proposal') ? 'active' : '' }}">
+                    <i class="nav-icon fas fa-file"></i>
+                    <p>
+                        Cek Proposal (V2)
+                    </p>
+                </a>
 
             </ul>
         </nav>

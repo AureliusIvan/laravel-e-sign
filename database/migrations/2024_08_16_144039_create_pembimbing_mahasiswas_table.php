@@ -17,7 +17,7 @@ return new class extends Migration
     {
         Schema::create('pembimbing_mahasiswa', function (Blueprint $table) {
             $table->id();
-            $table->uuid()->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(TahunAjaran::class);
             $table->foreignIdFor(ProgramStudi::class);
             $table->foreignIdFor(Mahasiswa::class, 'mahasiswa')->nullable();

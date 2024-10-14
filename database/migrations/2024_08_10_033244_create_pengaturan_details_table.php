@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('pengaturan_detail', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(Pengaturan::class);
             $table->smallInteger('kuota_pembimbing_pertama')->nullable();
             $table->smallInteger('kuota_pembimbing_kedua')->nullable();

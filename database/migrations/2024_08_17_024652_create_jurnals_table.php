@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('jurnal', function (Blueprint $table) {
             $table->id();
-            $table->uuid()->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(Mahasiswa::class);
             $table->string('file_jurnal', 510);
             $table->string('file_jurnal_random', 510);

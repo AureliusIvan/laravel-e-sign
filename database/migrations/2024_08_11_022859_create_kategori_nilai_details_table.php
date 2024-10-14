@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('kategori_nilai_detail', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(KategoriNilai::class);
             $table->text('detail_kategori');
             $table->tinyInteger('detail_persentase');

@@ -16,7 +16,7 @@ return new class extends Migration
     {
         Schema::create('proposal_skripsi', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(ProposalSkripsiForm::class);
             $table->foreignIdFor(Mahasiswa::class);
             $table->text('judul_proposal');

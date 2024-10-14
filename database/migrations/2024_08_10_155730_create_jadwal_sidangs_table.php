@@ -18,7 +18,7 @@ return new class extends Migration
     {
         Schema::create('jadwal_sidang', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(TahunAjaran::class);
             $table->foreignIdFor(ProgramStudi::class);
             $table->foreignIdFor(LaporanAkhir::class);

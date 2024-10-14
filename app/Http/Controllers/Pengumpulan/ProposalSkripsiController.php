@@ -7,6 +7,7 @@ use Exception;
 use App\Models\Mahasiswa;
 use App\Models\Pengaturan;
 use App\Models\TahunAjaran;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Models\ProposalSkripsi;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +20,10 @@ use App\Models\ResearchList;
 use App\Models\TopikPenelitianProposal;
 use Illuminate\Support\Facades\Auth;
 use TCPDF;
-use setasign\Fpdi\Tcpdf\Fpdi; // Use the FPDI class that extends TCPDF
+use setasign\Fpdi\Tcpdf\Fpdi;
 
+// Use the FPDI class that extends TCPDF
+use App\Http\Controllers\SignatureController;
 use Illuminate\Support\Facades\Storage;
 use function Symfony\Component\VarDumper\Dumper\esc;
 
@@ -55,6 +58,11 @@ class ProposalSkripsiController extends Controller
         ]);
     }
 
+    /**
+     * Store a newly created resource in storage (called on mahasiswa's proposal submission)
+     * @param Request $request
+     * @return RedirectResponse
+     */
     public function store(Request $request)
     {
         $request->validate([
@@ -66,7 +74,6 @@ class ProposalSkripsiController extends Controller
 
         try {
             DB::transaction(function () use ($request) {
-                DB::table('proposal_skripsi')->lockForUpdate()->get();
                 $active = TahunAjaran::where('status_aktif', 1)->first();
                 $user = Mahasiswa::where('user_id', Auth::user()->id)->firstOrFail();
                 $form = ProposalSkripsiForm::where('uuid', $request->id_form)->firstOrFail();
@@ -78,86 +85,94 @@ class ProposalSkripsiController extends Controller
                 $pembimbingPertama = $pembimbing->pembimbing1 ?? null;
                 $pembimbingKedua = $pembimbing->pembimbing2 ?? null;
 
-                // Handle file naming logic based on penamaan proposal
                 $isPenamaan = Pengaturan::with('pengaturanDetail')
                     ->where('tahun_ajaran_id', $active->id)
                     ->where('program_studi_id', $user->program_studi_id)
                     ->first();
-                if ($isPenamaan->penamaan_proposal == 1) {
-                    $format = explode("_", $isPenamaan->pengaturanDetail->penamaan_proposal);
-                    if (count($format) != 3) {
-                        throw new Exception('Format invalid');
-                    }
 
-                    $escJudul = esc($request->judul_proposal);
-                    if (str_word_count($escJudul) < 4) {
-                        throw new Exception('Jumlah kata kurang');
-                    }
+                $file = $request->file('file');
+                $fileNameRandom = $this->getRandomFileName($file);
 
-                    $file = $request->file('file');
-                    $fileNameRandom = date('YmdHis') . '_' . $file->hashName();
-                    $fileName = $this->generateFileName($format, $user, $escJudul);
+                if ($this->shouldApplyNamingConvention($isPenamaan)) {
+                    $this->validateProposalTitle($request->judul_proposal);
 
-                    // Store the uploaded PDF file
-                    $file->storeAs('uploads/proposal', $fileNameRandom);
-                    $mimeType = $file->getClientMimeType();
-                    // Insert proposal skripsi record
-                    $proposal = ProposalSkripsi::create([
-                        'proposal_skripsi_form_id' => $form->id,
-                        'mahasiswa_id' => $user->id,
-                        'judul_proposal' => $request->judul_proposal,
-                        'file_proposal' => $fileName,
-                        'file_proposal_random' => $fileNameRandom,
-                        'file_proposal_mime' => $file->getClientMimeType(),
-                        'status' => 1,
-                        'penilai1' => $pembimbingPertama,
-                        'penilai2' => $pembimbingKedua,
-                        'is_expired' => false,
-                        'file_penilai1_mime' => $mimeType,
-                        'file_penilai2_mime' => $mimeType,
-                        'file_penilai3_mime' => $mimeType,
-                    ]);
-                    // Now, call the embedFilesInExistingPdf method to attach additional files
-                    $filesToEmbed = [storage_path('data.json'), storage_path('data.xml')];
-                    $this->embedFilesInExistingPdf(
-                        storage_path('app/uploads/proposal/' . $fileNameRandom),
-                        storage_path('app/uploads/proposal-signed/' . $fileNameRandom),
-                        $filesToEmbed
-                    );
+                    $fileName = $this->generateFileName($isPenamaan->pengaturanDetail->penamaan_proposal, $user, esc($request->judul_proposal));
                 } else {
-                    // Similar process if there is no penamaan_proposal check
-                    $file = $request->file('file');
-                    $fileNameRandom = date('YmdHis') . '_' . $file->hashName();
-
-                    $proposal = ProposalSkripsi::create([
-                        'proposal_skripsi_form_id' => $form->id,
-                        'mahasiswa_id' => $user->id,
-                        'judul_proposal' => $request->judul_proposal,
-                        'file_proposal' => $file->getClientOriginalName(),
-                        'file_proposal_random' => $fileNameRandom,
-                        'file_proposal_mime' => $file->getClientMimeType(),
-                        'status' => 1,
-                        'penilai1' => $pembimbingPertama,
-                        'penilai2' => $pembimbingKedua,
-                        'is_expired' => false,
-                    ]);
-
-                    $file->storeAs('uploads/proposal', $fileNameRandom);
-
-                    // Call the embedFilesInExistingPdf function
-                    $filesToEmbed = ['data.json', 'data.xml'];
-                    $this->embedFilesInExistingPdf(
-                        storage_path('app/uploads/proposal/' . $fileNameRandom),
-                        storage_path('app/uploads/proposal-signed/' . $fileNameRandom),
-                        $filesToEmbed
-                    );
+                    $fileName = $file->getClientOriginalName();
                 }
+
+                $this->storeFile($file, $fileNameRandom);
+
+                $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $fileName, $fileNameRandom, $file->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
+
+                // Optional: Embed additional files into PDF (if needed)
+//            $this->embedFilesInExistingPdf(
+//                storage_path('app/uploads/proposal/' . $fileNameRandom),
+//                storage_path('app/uploads/proposal-signed/' . $fileNameRandom),
+//                [storage_path('data.json'), storage_path('data.xml')]
+//            );
             });
+
             return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Berhasil mengupload file');
         } catch (Exception $e) {
-            dd($e);
             return redirect()->back()->with('error', 'Gagal mengupload file');
         }
+    }
+
+    /**
+     * Generate a random file name.
+     */
+    private function getRandomFileName($file)
+    {
+        return date('YmdHis') . '_' . $file->hashName();
+    }
+
+    /**
+     * Determine if a naming convention should be applied.
+     */
+    private function shouldApplyNamingConvention($isPenamaan)
+    {
+        return isset($isPenamaan->penamaan_proposal) && $isPenamaan->penamaan_proposal == 1;
+    }
+
+    /**
+     * Validate the proposal title based on word count.
+     */
+    private function validateProposalTitle($judul)
+    {
+        if (str_word_count(esc($judul)) < 4) {
+            throw new Exception('Jumlah kata kurang');
+        }
+    }
+
+    /**
+     * Store the uploaded file.
+     */
+    private function storeFile($file, $fileNameRandom)
+    {
+        $file->storeAs('uploads/proposal', $fileNameRandom);
+    }
+
+    /**
+     * Create a new ProposalSkripsi record.
+     */
+    private function createProposalSkripsi($formId, $mahasiswaId, $judulProposal, $fileName, $fileNameRandom, $mimeType, $pembimbing1, $pembimbing2)
+    {
+        ProposalSkripsi::create([
+            'proposal_skripsi_form_id' => $formId,
+            'mahasiswa_id' => $mahasiswaId,
+            'judul_proposal' => $judulProposal,
+            'file_proposal' => $fileName,
+            'file_proposal_random' => $fileNameRandom,
+            'file_proposal_mime' => $mimeType,
+            'status' => 1,
+            'penilai1' => $pembimbing1,
+            'penilai2' => $pembimbing2,
+            'is_expired' => false,
+            'file_penilai1_mime' => $mimeType,
+            'file_penilai2_mime' => $mimeType,
+            'file_penilai3_mime' => $mimeType,
+        ]);
     }
 
     public function destroy(Request $request)
@@ -206,11 +221,12 @@ class ProposalSkripsiController extends Controller
             })
             ->where('mahasiswa_id', $user->id)
             ->where(function ($query) {
-                $query->where('penilai1', '!=', null)
-                    ->where('penilai2', '!=', null)
-                    ->where('penilai3', '!=', null);
+                $query->where('penilai1', '!=', null);
+//                    ->where('penilai2', '!=', null)
+//                    ->where('penilai3', '!=', null);
             })
             ->get();
+//        dd($result);
         if (count($result) <= 0) {
             $result = [];
         }
@@ -284,96 +300,6 @@ class ProposalSkripsiController extends Controller
         } else {
             abort(404);
         }
-    }
-
-    public function embedFilesInExistingPdf($existingPdfPath, $outputPdfPath, array $filesToEmbed)
-    {
-        // Ensure the existing PDF file exists
-        if (!file_exists($existingPdfPath)) {
-            return response()->json(['error' => 'PDF file not found'], 404);
-        }
-
-        // Create a new FPDI instance (which extends TCPDF)
-        $pdf = new Fpdi();
-
-        // Set document information if needed
-        $pdf->SetCreator(PDF_CREATOR);
-        $pdf->SetAuthor('Your Name');
-        $pdf->SetTitle('Document with Attachments');
-
-        // Import the existing PDF
-        $pageCount = $pdf->setSourceFile($existingPdfPath);
-
-        // Import all pages from the existing PDF
-        for ($i = 1; $i <= $pageCount; $i++) {
-            $templateId = $pdf->importPage($i);
-            $size = $pdf->getTemplateSize($templateId);
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($templateId);
-
-            if ($i == $pageCount) {
-                if (file_exists(storage_path('/signature.png'))) {
-                    // Determine the position and size for the signature
-                    $xPosition = $size['width'] - 60; // Adjust as needed
-                    $yPosition = $size['height'] - 40; // Adjust as needed
-                    $width = 50; // Adjust as needed
-                    $height = 30; // Adjust as needed
-
-                    // Embed the signature image
-                    $pdf->Image(
-                        storage_path('/signature.png'),
-                        $xPosition,
-                        $yPosition,
-                        $width,
-                        $height,
-                        '',     // Image type (auto-detected if empty)
-                        '',     // Link (none in this case)
-                        '',     // Alignment
-                        false,  // Resize (true or false)
-                        300,    // DPI
-                        '',     // Image mask
-                        false,  // Fit box (true or false)
-                        false,  // Hidden (true or false)
-                        0       // Border (0 for no border)
-                    );
-                } else {
-                    dd($existingPdfPath);
-                }
-            }
-        }
-
-
-
-        // Embed each file as a file annotation
-        foreach ($filesToEmbed as $filePath) {
-            if (file_exists($filePath)) {
-                $fileName = basename($filePath);
-                $fileExtension = pathinfo($filePath, PATHINFO_EXTENSION);
-
-                // Determine the MIME type based on file extension
-                $fileType = match($fileExtension) {
-                    'json' => 'application/json',
-                    'xml'  => 'application/xml',
-                    'dat'  => 'application/octet-stream',  // DAT files typically use this MIME type
-                    default => mime_content_type($filePath), // Fallback to generic mime type detection
-                };
-
-                // Description for the attachment
-                $description = "Attached file: {$fileName}";
-
-                // Attach the file as an annotation to the first page
-                $pdf->Annotation(
-                    0, 0, 1, 1,     // Position and size of the annotation icon
-                    $description,      // Description of the file
-                    ['Subtype' => 'FileAttachment', 'Name' => 'PushPin', 'FS' => $filePath]
-                );
-            } else {
-                \Log::warning("File not found: {$filePath}");
-            }
-        }
-
-        // Output the PDF to a file
-        $pdf->Output($outputPdfPath, 'F');
     }
 
 

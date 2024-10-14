@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('kode_penelitian_proposal', function (Blueprint $table) {
             $table->id();
-            $table->uuid()->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(ProposalSkripsi::class);
             $table->foreignIdFor(AreaPenelitian::class);
             $table->timestamps();
