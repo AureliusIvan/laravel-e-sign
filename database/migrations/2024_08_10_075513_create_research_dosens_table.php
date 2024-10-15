@@ -16,7 +16,7 @@ return new class extends Migration
     {
         Schema::create('research_dosen', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(ProgramStudi::class);
             $table->foreignIdFor(Dosen::class);
             $table->foreignIdFor(ResearchList::class);

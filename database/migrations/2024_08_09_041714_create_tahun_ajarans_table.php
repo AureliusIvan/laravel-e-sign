@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('tahun_ajaran', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->smallInteger('tahun');
             $table->string('semester', 15);
             $table->boolean('status_aktif')->nullable()->default(0);

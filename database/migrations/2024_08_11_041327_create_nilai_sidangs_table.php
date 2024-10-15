@@ -17,7 +17,7 @@ return new class extends Migration
     {
         Schema::create('nilai_sidang', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(Mahasiswa::class);
             $table->foreignIdFor(Dosen::class);
             $table->foreignIdFor(NilaiAkhir::class);

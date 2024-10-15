@@ -16,7 +16,7 @@ return new class extends Migration
     {
         Schema::create('revisi_laporan', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(JadwalSidang::class);
             $table->foreignIdFor(LaporanAkhir::class);
             $table->text('judul_revisi_laporan')->nullable();

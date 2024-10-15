@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Periksa;
 
+use App\Http\Controllers\SignatureController;
 use Exception;
 use ZipArchive;
 use App\Models\Dosen;
@@ -23,8 +24,8 @@ class PeriksaProposalController extends Controller
         $user = Dosen::where('user_id', Auth::user()->id)->firstOrFail();
         $now = date('Y-m-d H:i:s');
         $data = ProposalSkripsiForm::where('tahun_ajaran_id', $active->id)
-            ->where('program_studi_id', $user->program_studi_id)
-            ->where('ditutup', '<', $now)
+//            ->where('program_studi_id', $user->program_studi_id)
+//            ->where('ditutup', '<', $now)
             ->orderBy('dibuka', 'asc')
             ->get();
         return view('pages.dosen.periksa-proposal.periksa-proposal', [
@@ -55,17 +56,17 @@ class PeriksaProposalController extends Controller
                 $query->select('id', 'nim', 'nama');
             })
             ->with('kodePenelitianProposal.areaPenelitian')
-            ->where('proposal_skripsi_form_id', $form->id)
-            ->where(function ($query) use ($user) {
-                $query->where('penilai1', $user->id)
-                    ->orWhere('penilai2', $user->id)
-                    ->orWhere('penilai3', $user->id);
-            })
-            ->where(function ($query) {
-                $query->where('penilai1', '!=', null)
-                    ->where('penilai2', '!=', null)
-                    ->where('penilai3', '!=', null);
-            })
+//            ->where('proposal_skripsi_form_id', $form->id)
+//            ->where(function ($query) use ($user) {
+//                $query->where('penilai1', $user->id)
+//                    ->orWhere('penilai2', $user->id)
+//                    ->orWhere('penilai3', $user->id);
+//            })
+//            ->where(function ($query) {
+//                $query->where('penilai1', '!=', null)
+//                    ->where('penilai2', '!=', null)
+//                    ->where('penilai3', '!=', null);
+//            })
             ->get();
         return view('pages.dosen.periksa-proposal.detail-periksa-proposal', [
             'title' => 'Periksa Proposal',
@@ -141,36 +142,30 @@ class PeriksaProposalController extends Controller
 
                 $proposal = ProposalSkripsi::where('id', $request->proposal_id)->firstOrFail();
 
-                if ($penilai == 1) {
-                    $proposal->file_penilai1 = $fileName;
-                    $proposal->file_random_penilai1 = $fileNameRandom;
-                    $proposal->file_penilai1_mime = $mimeType;
-                    $proposal->status_approval_penilai1 = $request->status;
-                    $proposal->tanggal_approval_penilai1 = $now;
+                $penilaiFields = [
+                    'file_penilai' . $penilai => $fileName,
+                    'file_random_penilai' . $penilai => $fileNameRandom,
+                    'file_penilai' . $penilai . '_mime' => $mimeType,
+                    'status_approval_penilai' . $penilai => $request->status,
+                    'tanggal_approval_penilai' . $penilai => $now,
+                ];
+
+                // Check if the penilai is valid
+                if (in_array($penilai, [1, 2, 3])) {
+                    // Update proposal fields dynamically
+                    foreach ($penilaiFields as $field => $value) {
+                        $proposal->{$field} = $value;
+                    }
+
                     $proposal->save();
 
-                    $file->storeAs('uploads/periksa-proposal', $fileNameRandom);
-                } elseif ($penilai == 2) {
-                    $proposal->file_penilai2 = $fileName;
-                    $proposal->file_random_penilai2 = $fileNameRandom;
-                    $proposal->file_penilai2_mime = $mimeType;
-                    $proposal->status_approval_penilai2 = $request->status;
-                    $proposal->tanggal_approval_penilai2 = $now;
-                    $proposal->save();
-
-                    $file->storeAs('uploads/periksa-proposal', $fileNameRandom);
-                } elseif ($penilai == 3) {
-                    $proposal->file_penilai3 = $fileName;
-                    $proposal->file_random_penilai3 = $fileNameRandom;
-                    $proposal->file_penilai3_mime = $mimeType;
-                    $proposal->status_approval_penilai3 = $request->status;
-                    $proposal->tanggal_approval_penilai3 = $now;
-                    $proposal->save();
-
+                    // Store the file
+                    // TODO: embed signature
                     $file->storeAs('uploads/periksa-proposal', $fileNameRandom);
                 } else {
                     throw new Exception('Gagal mengupload file');
                 }
+
 
                 $proposal = ProposalSkripsi::with('proposalSkripsiForm')->where('id', $request->proposal_id)->firstOrFail();
                 if ($proposal->status_approval_penilai1 !== null && $proposal->status_approval_penilai2 !== null && $proposal->status_approval_penilai3 !== null) {

@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('area_penelitian', function (Blueprint $table) {
             $table->id();
-            $table->uuid()->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(ResearchList::class);
             $table->string('kode_area_penelitian', 20);
             $table->text('keterangan');

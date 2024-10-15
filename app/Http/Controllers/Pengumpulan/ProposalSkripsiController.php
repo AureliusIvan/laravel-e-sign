@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Pengumpulan;
 
+use App\Http\Controllers\PdfWithAttachments;
 use Exception;
 use App\Models\Mahasiswa;
 use App\Models\Pengaturan;
 use App\Models\TahunAjaran;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Models\ProposalSkripsi;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +19,11 @@ use App\Models\PembimbingMahasiswa;
 use App\Models\ResearchList;
 use App\Models\TopikPenelitianProposal;
 use Illuminate\Support\Facades\Auth;
+use TCPDF;
+use setasign\Fpdi\Tcpdf\Fpdi;
 
+// Use the FPDI class that extends TCPDF
+use App\Http\Controllers\SignatureController;
 use Illuminate\Support\Facades\Storage;
 use function Symfony\Component\VarDumper\Dumper\esc;
 
@@ -52,6 +58,11 @@ class ProposalSkripsiController extends Controller
         ]);
     }
 
+    /**
+     * Store a newly created resource in storage (called on mahasiswa's proposal submission)
+     * @param Request $request
+     * @return RedirectResponse
+     */
     public function store(Request $request)
     {
         $request->validate([
@@ -61,11 +72,8 @@ class ProposalSkripsiController extends Controller
             'id_form' => ['required'],
         ]);
 
-        // dd($request->all());
-
         try {
             DB::transaction(function () use ($request) {
-                DB::table('proposal_skripsi')->lockForUpdate()->get();
                 $active = TahunAjaran::where('status_aktif', 1)->first();
                 $user = Mahasiswa::where('user_id', Auth::user()->id)->firstOrFail();
                 $form = ProposalSkripsiForm::where('uuid', $request->id_form)->firstOrFail();
@@ -73,161 +81,98 @@ class ProposalSkripsiController extends Controller
                     ->where('program_studi_id', $user->program_studi_id)
                     ->where('mahasiswa', $user->id)
                     ->first();
-                $pembimbingPertama = null;
-                $pembimbingKedua = null;
-                if ($pembimbing !== null) {
-                    $pembimbingPertama = $pembimbing->pembimbing1;
-                    $pembimbingKedua = $pembimbing->pembimbing2;
-                }
+
+                $pembimbingPertama = $pembimbing->pembimbing1 ?? null;
+                $pembimbingKedua = $pembimbing->pembimbing2 ?? null;
 
                 $isPenamaan = Pengaturan::with('pengaturanDetail')
                     ->where('tahun_ajaran_id', $active->id)
                     ->where('program_studi_id', $user->program_studi_id)
                     ->first();
 
-                if ($isPenamaan->penamaan_proposal == 1) {
-                    $format = explode("_", $isPenamaan->pengaturanDetail->penamaan_proposal);
-                    $countFormat = count($format);
+                $file = $request->file('file');
+                $fileNameRandom = $this->getRandomFileName($file);
 
-                    if ($countFormat != 3) {
-                        throw new Exception('Format invalid');
-                    }
+                if ($this->shouldApplyNamingConvention($isPenamaan)) {
+                    $this->validateProposalTitle($request->judul_proposal);
 
-                    $escJudul = esc($request->judul_proposal);
-                    $countWordJudul = str_word_count($escJudul);
-
-                    if ($countWordJudul < 4) {
-                        throw new Exception('Jumlah kata kurang');
-                    } else {
-                        $file = $request->file('file');
-                        $clientName = $file->getClientOriginalName();
-                        $mimeType = $file->getClientMimeType();
-                        $fileNameRandom = date('YmdHis') . '_' . $file->hashName();
-                        $nim = $user->nim;
-                        $nama = $user->nama;
-
-                        if ($nama == trim($nama) && str_contains($nama, ' ')) {
-                            $nama = str_replace(' ', '', $nama);
-                        }
-                        // $judul = explode(' ', $escJudul);
-                        $firstFormat = $format[0];
-                        $secondFormat = $format[1];
-                        $thridFormat = $format[2];
-                        $fileName = '';
-
-                        if ($firstFormat == 'nim') {
-                            if ($secondFormat == 'nama') {
-                                $fileName = $nim . '_' . $nama . '_' . 'ProposalSkripsi' . '.pdf';
-                            } elseif ($secondFormat == 'judul') {
-                                $fileName = $nim . '_' . 'ProposalSkripsi' . '_' . $nama . '.pdf';
-                            } else {
-                                throw new  Exception("Error Processing Request", 1);
-                            }
-                        } elseif ($firstFormat == 'nama') {
-                            if ($secondFormat == 'nim') {
-                                $fileName = $nama . '_' . $nim . '_' . 'ProposalSkripsi' . '.pdf';
-                            } elseif ($secondFormat == 'judul') {
-                                $fileName = $nama . '_' . 'ProposalSkripsi' . '_' . $nim . '.pdf';
-                            } else {
-                                throw new  Exception("Error Processing Request", 1);
-                            }
-                        } elseif ($firstFormat == 'judul') {
-                            if ($secondFormat == 'nim') {
-                                $fileName = 'ProposalSkripsi' . '_' . $nim . '_' . $nama . '.pdf';
-                            } elseif ($secondFormat == 'nama') {
-                                $fileName = 'ProposalSkripsi' . '_' . $nama . '_' . $nim . '.pdf';
-                            } else {
-                                throw new  Exception("Error Processing Request", 1);
-                            }
-                        } else {
-                            throw new  Exception("Error Processing Request", 1);
-                        }
-
-                        $pengaturan = Pengaturan::with('pengaturanDetail')
-                            ->where('tahun_ajaran_id', $active->id)
-                            ->where('program_studi_id', $user->program_studi_id)
-                            ->firstOrFail();
-
-                        $proposal = ProposalSkripsi::create([
-                            'proposal_skripsi_form_id' => $form->id,
-                            'mahasiswa_id' => $user->id,
-                            'judul_proposal' => $request->judul_proposal,
-                            'file_proposal' => $fileName,
-                            'file_proposal_random' => $fileNameRandom,
-                            'file_proposal_mime' => $mimeType,
-                            'status' => 1,
-                            'penilai1' => $pembimbingPertama,
-                            'penilai2' => $pembimbingKedua,
-                            'available_at_tahun' => $active->tahun,
-                            'available_at_semester' => $active->semester,
-                            'available_until_tahun' => $pengaturan->pengaturanDetail->tahun_proposal_tersedia_sampai,
-                            'available_until_semester' => $pengaturan->pengaturanDetail->semester_proposal_tersedia_sampai,
-                            'is_expired' => false,
-                        ]);
-
-                        $lastId = $proposal->id;
-
-                        foreach ($request->topik_penelitian as $row) {
-                            $kode = ResearchList::where('uuid', $row)->firstOrFail();
-                            TopikPenelitianProposal::create([
-                                'proposal_skripsi_id' => $lastId,
-                                'research_list_id' => $kode->id,
-                            ]);
-                        }
-
-                        $file->storeAs('uploads/proposal', $fileNameRandom);
-                    }
+                    $fileName = $this->generateFileName($isPenamaan->pengaturanDetail->penamaan_proposal, $user, esc($request->judul_proposal));
                 } else {
-                    $escJudul = esc($request->judul_proposal);
-                    $countWordJudul = str_word_count($escJudul);
-
-                    if ($countWordJudul < 4) {
-                        throw new Exception('Jumlah kata kurang');
-                    } else {
-                        $file = $request->file('file');
-                        $clientName = $file->getClientOriginalName();
-                        $mimeType = $file->getClientMimeType();
-                        $fileNameRandom = date('YmdHis') . '_' . $file->hashName();
-
-                        $pengaturan = Pengaturan::with('pengaturanDetail')
-                            ->where('tahun_ajaran_id', $active->id)
-                            ->where('program_studi_id', $user->program_studi_id)
-                            ->firstOrFail();
-
-                        $proposal = ProposalSkripsi::create([
-                            'proposal_skripsi_form_id' => $form->id,
-                            'mahasiswa_id' => $user->id,
-                            'judul_proposal' => $request->judul_proposal,
-                            'file_proposal' => $clientName,
-                            'file_proposal_random' => $fileNameRandom,
-                            'file_proposal_mime' => $mimeType,
-                            'status' => 1,
-                            'penilai1' => $pembimbingPertama,
-                            'penilai2' => $pembimbingKedua,
-                            'available_at_tahun' => $active->tahun,
-                            'available_at_semester' => $active->semester,
-                            'available_until_tahun' => $pengaturan->pengaturanDetail->tahun_proposal_tersedia_sampai,
-                            'available_until_semester' => $pengaturan->pengaturanDetail->semester_proposal_tersedia_sampai,
-                            'is_expired' => false,
-                        ]);
-                        $lastId = $proposal->id;
-
-                        foreach ($request->topik_penelitian as $row) {
-                            $kode = ResearchList::where('uuid', $row)->firstOrFail();
-                            TopikPenelitianProposal::create([
-                                'proposal_skripsi_id' => $lastId,
-                                'research_list_id' => $kode->id,
-                            ]);
-                        }
-
-                        $file->storeAs('uploads/proposal', $fileNameRandom);
-                    }
+                    $fileName = $file->getClientOriginalName();
                 }
+
+                $this->storeFile($file, $fileNameRandom);
+
+                $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $fileName, $fileNameRandom, $file->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
+
+                // Optional: Embed additional files into PDF (if needed)
+//            $this->embedFilesInExistingPdf(
+//                storage_path('app/uploads/proposal/' . $fileNameRandom),
+//                storage_path('app/uploads/proposal-signed/' . $fileNameRandom),
+//                [storage_path('data.json'), storage_path('data.xml')]
+//            );
             });
+
             return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Berhasil mengupload file');
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return redirect()->back()->with('error', 'Gagal mengupload file');
         }
+    }
+
+    /**
+     * Generate a random file name.
+     */
+    private function getRandomFileName($file)
+    {
+        return date('YmdHis') . '_' . $file->hashName();
+    }
+
+    /**
+     * Determine if a naming convention should be applied.
+     */
+    private function shouldApplyNamingConvention($isPenamaan)
+    {
+        return isset($isPenamaan->penamaan_proposal) && $isPenamaan->penamaan_proposal == 1;
+    }
+
+    /**
+     * Validate the proposal title based on word count.
+     */
+    private function validateProposalTitle($judul)
+    {
+        if (str_word_count(esc($judul)) < 4) {
+            throw new Exception('Jumlah kata kurang');
+        }
+    }
+
+    /**
+     * Store the uploaded file.
+     */
+    private function storeFile($file, $fileNameRandom)
+    {
+        $file->storeAs('uploads/proposal', $fileNameRandom);
+    }
+
+    /**
+     * Create a new ProposalSkripsi record.
+     */
+    private function createProposalSkripsi($formId, $mahasiswaId, $judulProposal, $fileName, $fileNameRandom, $mimeType, $pembimbing1, $pembimbing2)
+    {
+        ProposalSkripsi::create([
+            'proposal_skripsi_form_id' => $formId,
+            'mahasiswa_id' => $mahasiswaId,
+            'judul_proposal' => $judulProposal,
+            'file_proposal' => $fileName,
+            'file_proposal_random' => $fileNameRandom,
+            'file_proposal_mime' => $mimeType,
+            'status' => 1,
+            'penilai1' => $pembimbing1,
+            'penilai2' => $pembimbing2,
+            'is_expired' => false,
+            'file_penilai1_mime' => $mimeType,
+            'file_penilai2_mime' => $mimeType,
+            'file_penilai3_mime' => $mimeType,
+        ]);
     }
 
     public function destroy(Request $request)
@@ -249,6 +194,7 @@ class ProposalSkripsiController extends Controller
             });
             return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Data berhasil dihapus.');
         } catch (\Exception $e) {
+            dd($e);
             return redirect()->back()->with('error', 'Gagal menghapus file');
         }
     }
@@ -275,11 +221,12 @@ class ProposalSkripsiController extends Controller
             })
             ->where('mahasiswa_id', $user->id)
             ->where(function ($query) {
-                $query->where('penilai1', '!=', null)
-                    ->where('penilai2', '!=', null)
-                    ->where('penilai3', '!=', null);
+                $query->where('penilai1', '!=', null);
+//                    ->where('penilai2', '!=', null)
+//                    ->where('penilai3', '!=', null);
             })
             ->get();
+//        dd($result);
         if (count($result) <= 0) {
             $result = [];
         }
@@ -354,4 +301,38 @@ class ProposalSkripsiController extends Controller
             abort(404);
         }
     }
+
+
+    private function generateFileName($format, $user, $judulProposal)
+    {
+        $nim = $user->nim;
+        $nama = str_replace(' ', '', trim($user->nama));
+        $fileName = '';
+
+        $firstFormat = $format[0];
+        $secondFormat = $format[1];
+
+        if ($firstFormat === 'nim') {
+            if ($secondFormat === 'nama') {
+                $fileName = $nim . '_' . $nama . '_' . 'ProposalSkripsi' . '.pdf';
+            } elseif ($secondFormat === 'judul') {
+                $fileName = $nim . '_' . 'ProposalSkripsi' . '_' . $nama . '.pdf';
+            }
+        } elseif ($firstFormat === 'nama') {
+            if ($secondFormat === 'nim') {
+                $fileName = $nama . '_' . $nim . '_' . 'ProposalSkripsi' . '.pdf';
+            } elseif ($secondFormat === 'judul') {
+                $fileName = $nama . '_' . 'ProposalSkripsi' . '_' . $nim . '.pdf';
+            }
+        } elseif ($firstFormat === 'judul') {
+            if ($secondFormat === 'nim') {
+                $fileName = 'ProposalSkripsi' . '_' . $nim . '_' . $nama . '.pdf';
+            } elseif ($secondFormat === 'nama') {
+                $fileName = 'ProposalSkripsi' . '_' . $nama . '_' . $nim . '.pdf';
+            }
+        }
+
+        return $fileName;
+    }
+
 }

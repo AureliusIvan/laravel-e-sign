@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('pengaturan', function (Blueprint $table) {
             $table->id();
-            $table->uuid('uuid')->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(TahunAjaran::class);
             $table->foreignIdFor(ProgramStudi::class);
             $table->boolean('kuota_bimbingan_kedua')->nullable();

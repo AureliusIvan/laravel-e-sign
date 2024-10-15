@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('source_codes', function (Blueprint $table) {
             $table->id();
-            $table->uuid()->unique();
+            $table->char('uuid', 36)->unique();
             $table->foreignIdFor(Mahasiswa::class);
             $table->string('file_source_code', 510);
             $table->string('file_source_code_random', 510);

@@ -37,6 +37,7 @@ use App\Http\Controllers\Periksa\PeriksaLaporanAkhirController;
 use App\Http\Controllers\Periksa\PeriksaRevisiProposalController;
 use App\Http\Controllers\ProposalRtiController;
 use App\Http\Controllers\ProposalRtiFormController;
+use App\Http\Controllers\SignatureController;
 
 Route::get('/', function () {
     $active = TahunAjaran::where('status_aktif', 1)->first();
@@ -222,7 +223,7 @@ Route::middleware(['auth', 'verified', 'user.type:kaprodi,sekprodi', 'check.stat
     Route::delete('/areapenelitian/destroy', [AreaPenelitianController::class, 'destroy'])->name('areapenelitian.destroy');
     Route::get('/areapenelitian/export-template', [AreaPenelitianController::class, 'exportTemplate'])->name('areapenelitian.export.template');
     Route::post('/areapenelitian/import', [AreaPenelitianController::class, 'import'])->name('areapenelitian.import');
-    
+
     // Form Proposal RTI
     Route::get('/proposal-rti/form', [ProposalRtiFormController::class, 'index'])->name('proposal.rti.form');
     Route::get('/proposal-rti/form/create', [ProposalRtiFormController::class, 'create'])->name('proposal.rti.form.create');
@@ -307,12 +308,23 @@ Route::middleware(['auth', 'verified', 'user.type:dosen,kaprodi,sekprodi', 'chec
     Route::get('/permintaan-mahasiswa/{uuid}/show', [PermintaanMahasiswaController::class, 'show'])->name('permintaan.mahasiswa.show');
     Route::post('/permintaan-mahasiswa/store', [PermintaanMahasiswaController::class, 'store'])->name('permintaan.mahasiswa.store');
     Route::get('/permintaan-mahasiswa/{uuid}/file', [CariPembimbingController::class, 'getFile'])->name('permintaan.mahasiswa.getfile');
-    
+
     // Topik Penelitian Saya
     Route::get('/topik-penelitian-saya', [ResearchDosenController::class, 'show'])->name('topik.penelitian.saya');
 
     // Mahasiswa Bimbingan
     Route::get('/list-mahasiswa-bimbingan', [PembimbingSayaController::class, 'dosen'])->name('list.mahasiswa.bimbingan');
+
+    // E-SIGN Route
+    Route::get('/verify-signed-document', [SignatureController::class, 'verifyThesis'])->name('verify');
+    Route::post('/verify-signed-document/upload', [SignatureController::class, 'uploadVerifyThesis'])->name('verify.upload');
+    Route::get('/check-thesis', [SignatureController::class, 'checkThesis'])->name('check.thesis');
+    Route::post('/check-thesis/sign', [SignatureController::class, 'signThesis'])->name('sign.thesis');
+    Route::get('/proposal/convert/{filename}', [SignatureController::class, 'convertPdfToImages'])
+        ->name('proposal.convert');
+    Route::get('/proposal/download/{filename}', [SignatureController::class, 'downloadSignedProposal'])
+        ->name('proposal.signed.download');
+
 
     // Bimbingan
     // Route::get('/bimbingan/dosen', [BimbinganController::class, 'dosen'])->name('bimbingan.dosen');
@@ -368,6 +380,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+//    Route::get('/proposal/{filename}', [ProposalController::class, 'serveFile'])
+//        ->name('proposal.serve')
+//        ->middleware('auth'); // Optional: restrict access
+    Route::get('/proposal/{filename}', [SignatureController::class, 'serveFile'])
+        ->name('proposal.serve');
 });
 
 Route::fallback(function () {
