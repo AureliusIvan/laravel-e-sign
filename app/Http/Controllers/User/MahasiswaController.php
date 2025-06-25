@@ -8,10 +8,13 @@ use App\Models\Mahasiswa;
 use App\Models\ProgramStudi;
 use App\Models\ProposalSkripsi;
 use App\Models\TahunAjaran;
+use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules;
 
 class MahasiswaController extends Controller
 {
@@ -22,6 +25,61 @@ class MahasiswaController extends Controller
             'title' => 'Akun',
             'subtitle' => 'Mahasiswa',
         ]);
+    }
+
+    public function create()
+    {
+        $program = ProgramStudi::all();
+        return view('pages.admin.user-mahasiswa.add-user-mahasiswa', compact('program'), [
+            'title' => 'Akun',
+            'subtitle' => 'Tambah Mahasiswa'
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $request->validate([
+            'nim' => ['required', 'string', 'max:20', 'unique:' . Mahasiswa::class],
+            'nama' => ['required', 'string', 'max:255'],
+            'program_studi' => ['required'],
+            'angkatan' => ['required', 'integer', 'min:2000', 'max:' . (date('Y') + 5)],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class, 'ends_with:umn.ac.id'],
+            'password' => ['required', 'confirmed', Rules\Password::default(), 'min:8'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($request) {
+                DB::table('users')->lockForUpdate()->get();
+
+                $user = User::create([
+                    'email' => $request->email,
+                    'password' => Hash::make($request->password),
+                    'role' => 'mahasiswa',
+                ]);
+
+                $lastUserId = $user->id;
+                $program = ProgramStudi::where('uuid', $request->program_studi)->firstOrFail();
+
+                Mahasiswa::create([
+                    'user_id' => $lastUserId,
+                    'nim' => $request->nim,
+                    'nama' => $request->nama,
+                    'program_studi_id' => $program->id,
+                    'angkatan' => $request->angkatan,
+                    'status_aktif_skripsi' => false,
+                ]);
+            });
+
+            if ($request->action === 'Save') {
+                return redirect()->route('mahasiswa')->with('success', 'Data berhasil ditambahkan');
+            } elseif ($request->action === 'Save and Create Another') {
+                return redirect()->back()->with('success', 'Data berhasil ditambahkan');
+            } else {
+                return redirect()->route('mahasiswa');
+            }
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Gagal melakukan registrasi. Silahkan coba kembali');
+        }
     }
 
     public function filter(Request $request)

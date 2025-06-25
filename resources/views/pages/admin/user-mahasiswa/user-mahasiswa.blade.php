@@ -46,6 +46,11 @@
                   Daftar Mahasiswa
                 </h3>
                 <div class="card-tools">
+                  <a href="{{ route('mahasiswa.create') }}" class="btn btn-success btn-sm mr-2">
+                    <i class="fas fa-plus mr-1">
+                    </i>
+                    Tambah Mahasiswa
+                  </a>
                   <a href="{{ route('mahasiswa.create.tahun.skripsi') }}" class="btn btn-primary btn-sm">
                     <i class="fas fa-plus mr-1">
                     </i>
