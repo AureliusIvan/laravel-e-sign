@@ -99,6 +99,9 @@ Route::middleware(['auth', 'verified', 'user.type:admin'])->group(function () {
     Route::get('/pengaturan/create', [PengaturanController::class, 'create'])->name('pengaturan.create');
     Route::post('/pengaturan/store', [PengaturanController::class, 'store'])->name('pengaturan.store');
     Route::get('/pengaturan/{uuid}/edit', [PengaturanController::class, 'edit'])->name('pengaturan.edit');
+
+    // Daftar Skripsi
+    Route::get('/daftar-skripsi', [HomeController::class, 'daftarSkripsi'])->name('admin.daftar.skripsi');
 });
 
 Route::middleware(['auth', 'verified', 'user.type:mahasiswa'])->group(function () {

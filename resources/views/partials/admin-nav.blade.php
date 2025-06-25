@@ -128,6 +128,14 @@
           </a>
         </li>
 
+        <!-- Daftar Skripsi -->
+        <li class="nav-item">
+          <a href="{{ route('admin.daftar.skripsi') }}" class="nav-link {{ ($title === 'Daftar Skripsi') ? 'active' : '' }}">
+            <i class="nav-icon fas fa-file-alt"></i>
+            <p>Daftar Skripsi</p>
+          </a>
+        </li>
+
         <li class="nav-header">PENGATURAN</li>
         <!-- Pengaturan -->
         <li class="nav-item">
