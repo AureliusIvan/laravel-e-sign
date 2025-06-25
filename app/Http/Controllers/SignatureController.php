@@ -387,6 +387,17 @@ class SignatureController extends Controller
     // e-sign page
     public function verifyThesis()
     {
+        // For admin users, just show the verify interface without student data
+        if (Auth::user()->role === 'admin') {
+            return view('pages.dosen.verify.verify', [
+                'title' => 'Verify Dokumen',
+                'subtitle' => 'Verify Dokumen',
+                'data' => collect([]), // Empty collection for admin
+                'status' => 'none',
+            ]);
+        }
+
+        // For dosen, kaprodi, sekprodi - show student data
         $active = TahunAjaran::where('status_aktif', 1)->first();
         $user = Dosen::where('user_id', Auth::user()->id)->firstOrFail();
         $pembimbingPertama = DB::table('pembimbing_mahasiswa')
@@ -430,8 +441,8 @@ class SignatureController extends Controller
         $data = $transformPertama->merge($transformKedua);
 
         return view('pages.dosen.verify.verify', [
-            'title' => 'Verify Thesis Document',
-            'subtitle' => 'Verify Thesis Document',
+            'title' => 'Verify Dokumen',
+            'subtitle' => 'Verify Dokumen',
             'data' => $data,
             'status' => 'none',
         ]);
@@ -472,8 +483,8 @@ class SignatureController extends Controller
             $proposal = ProposalSkripsi::where('uuid', $parsedArray['UUID'])->first();
             if ($proposal->hash_value !== $hashValue) {
                 return view('pages.dosen.verify.verify', [
-                    'title' => 'Mahasiswa',
-                    'subtitle' => 'List Mahasiswa Bimbingan',
+                    'title' => 'Verify Dokumen',
+                    'subtitle' => 'Verify Dokumen',
                     'status' => 'failed',
                     'hash_value' => $hashValue,
                     'error' => 'Hash value mismatch',
@@ -481,8 +492,8 @@ class SignatureController extends Controller
             }
 
             return view('pages.dosen.verify.verify', [
-                'title' => 'Mahasiswa',
-                'subtitle' => 'List Mahasiswa Bimbingan',
+                'title' => 'Verify Dokumen',
+                'subtitle' => 'Verify Dokumen',
                 'Tipe_Laporan' => $parsedArray['Tipe_Laporan'],
                 'Judul_Laporan' => $parsedArray['Judul_Laporan'],
                 'Prodi' => $parsedArray['Prodi'],
@@ -502,8 +513,8 @@ class SignatureController extends Controller
         } catch (\Exception $e) {
             // Handle the exception
             return view('pages.dosen.verify.verify', [
-                'title' => 'Mahasiswa',
-                'subtitle' => 'List Mahasiswa Bimbingan',
+                'title' => 'Verify Dokumen',
+                'subtitle' => 'Verify Dokumen',
                 'status' => 'error',
                 'error' => $e->getMessage(),
             ]);

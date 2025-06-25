@@ -4,8 +4,9 @@
     @if (auth()->user()->role === 'dosen')
         @include('partials.dosen-nav')
     @elseif (auth()->user()->role === 'kaprodi' || auth()->user()->role === 'sekprodi')
-        @include('partials.prodi-
-nav')
+        @include('partials.prodi-nav')
+    @elseif (auth()->user()->role === 'admin')
+        @include('partials.admin-nav')
     @endif
     <!-- Content Wrapper. Contains page content -->
     <div class="content-wrapper">

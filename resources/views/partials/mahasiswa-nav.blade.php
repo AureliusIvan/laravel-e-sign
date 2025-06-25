@@ -57,45 +57,14 @@
                     </a>
                 </li>
 
-                <!-- Pembimbing -->
-                <li class="nav-item {{ $title === 'Pembimbing' ? 'menu-open' : '' }}">
-                    <a href="#" class="nav-link {{ ($title === 'Pembimbing') ? 'active' : '' }}">
+                <!-- Pembimbing Saya -->
+                <li class="nav-item">
+                    <a href="{{ route('pembimbing.saya') }}" class="nav-link {{ ($title === 'Pembimbing') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-user"></i>
                         <p>
-                            Pembimbing
-                            <i class="right fas fa-angle-left"></i>
+                            Pembimbing Saya
                         </p>
                     </a>
-                    <ul class="nav nav-treeview">
-                        <li class="nav-item">
-                            <a href="{{ route('caripembimbing.list.pembimbing') }}"
-                                class="nav-link {{ (str_contains($subtitle, 'List Dosen Pembimbing')) ? 'active' : '' }}">
-                                <i class="nav-icon far fa-circle"></i>
-                                <p>List Dosen Pembimbing</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('caripembimbing') }}"
-                                class="nav-link {{ (str_contains($subtitle, 'Cari Pembimbing')) ? 'active' : '' }}">
-                                <i class="nav-icon far fa-circle"></i>
-                                <p>Cari Pembimbing</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('pembimbing.saya') }}"
-                                class="nav-link {{ (str_contains($subtitle, 'Pembimbing Saya')) ? 'active' : '' }}">
-                                <i class="nav-icon far fa-circle"></i>
-                                <p>Pembimbing Saya</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('proposal.rti') }}"
-                                class="nav-link {{ (str_contains($subtitle, 'Proposal RTI')) ? 'active' : '' }}">
-                                <i class="nav-icon far fa-circle"></i>
-                                <p>Proposal RTI</p>
-                            </a>
-                        </li>
-                    </ul>
                 </li>
 
                 <!-- Proposal Skripsi -->

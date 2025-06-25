@@ -120,6 +120,14 @@
           </a>
         </li>
 
+        <!-- Verify Documents -->
+        <li class="nav-item">
+          <a href="{{ route('verify') }}" class="nav-link {{ ($title === 'Verify Dokumen') ? 'active' : '' }}">
+            <i class="nav-icon fas fa-shield-alt"></i>
+            <p>Verify Dokumen</p>
+          </a>
+        </li>
+
         <li class="nav-header">PENGATURAN</li>
         <!-- Pengaturan -->
         <li class="nav-item">

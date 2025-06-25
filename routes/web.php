@@ -314,10 +314,6 @@ Route::middleware(['auth', 'verified', 'user.type:dosen,kaprodi,sekprodi', 'chec
 
     // Mahasiswa Bimbingan
     Route::get('/list-mahasiswa-bimbingan', [PembimbingSayaController::class, 'dosen'])->name('list.mahasiswa.bimbingan');
-
-    // E-SIGN Route
-    Route::get('/verify-signed-document', [SignatureController::class, 'verifyThesis'])->name('verify');
-    Route::post('/verify-signed-document/upload', [SignatureController::class, 'uploadVerifyThesis'])->name('verify.upload');
     Route::get('/check-thesis', [SignatureController::class, 'checkThesis'])->name('check.thesis');
     Route::post('/check-thesis/sign', [SignatureController::class, 'signThesis'])->name('sign.thesis');
     Route::get('/proposal/convert/{filename}', [SignatureController::class, 'convertPdfToImages'])
@@ -374,6 +370,12 @@ Route::middleware(['auth', 'verified', 'user.type:dosen,kaprodi,sekprodi', 'chec
     // Route::get('/nilai-sidang', [NilaiSidangController::class, 'index'])->name('nilai.sidang');
     // Route::get('/nilai-sidang/{uuid}/show', [NilaiSidangController::class, 'show'])->name('nilai.sidang.show');
     // Route::get('/nilai-sidang/{uuid}/file-laporan', [NilaiSidangController::class, 'fileKaprodi'])->name('nilai.sidang.file-laporan');
+});
+
+// E-SIGN Routes - Available for admin, dosen, kaprodi, sekprodi
+Route::middleware(['auth', 'verified', 'user.type:admin,dosen,kaprodi,sekprodi'])->group(function () {
+    Route::get('/verify-signed-document', [SignatureController::class, 'verifyThesis'])->name('verify');
+    Route::post('/verify-signed-document/upload', [SignatureController::class, 'uploadVerifyThesis'])->name('verify.upload');
 });
 
 Route::middleware('auth')->group(function () {

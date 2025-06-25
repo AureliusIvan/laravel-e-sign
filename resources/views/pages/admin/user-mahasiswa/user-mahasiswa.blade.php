@@ -78,7 +78,7 @@
                     <td>{{ $loop->iteration }}</td>
                     <td>{{ $d->nim }}</td>
                     <td>{{ $d->nama }}</td>
-                    <td>{{ $d->programStudi->program_studi }}</td>
+                    <td>{{ $d->programStudi ? $d->programStudi->program_studi : 'N/A' }}</td>
                     <td>{{ $d->angkatan }}</td>
                     <td>
                       @if ($d->status_aktif_skripsi === 0)

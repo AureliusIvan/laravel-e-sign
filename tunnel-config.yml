@@ -1,0 +1,10 @@
+tunnel: 9fc985dd-7962-489c-b883-f7d0ab26d358
+credentials-file: /home/ivan/.cloudflared/9fc985dd-7962-489c-b883-f7d0ab26d358.json
+
+ingress:
+  # Route for your domain (replace with your actual domain)
+  - hostname: esign.ivann.software
+    service: http://localhost:80
+  
+  # Catch-all rule (required)
+  - service: http_status:404 
