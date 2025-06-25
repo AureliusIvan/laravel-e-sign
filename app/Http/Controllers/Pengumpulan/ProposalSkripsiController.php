@@ -67,10 +67,15 @@ class ProposalSkripsiController extends Controller
     {
         $request->validate([
             'judul_proposal' => ['required', 'string'],
-            'file' => ['required', 'file', 'mimes:pdf', 'max:30720'],
+            'file' => ['required', 'file', 'mimes:pdf'],
             'topik_penelitian' => ['required'],
             'id_form' => ['required'],
         ]);
+
+        // Validate file upload
+        if (!$request->hasFile('file') || !$request->file('file')->isValid()) {
+            return redirect()->back()->with('error', 'File tidak valid atau tidak ada');
+        }
 
         try {
             DB::transaction(function () use ($request) {
@@ -104,18 +109,11 @@ class ProposalSkripsiController extends Controller
                 $this->storeFile($file, $fileNameRandom);
 
                 $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $fileName, $fileNameRandom, $file->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
-
-                // Optional: Embed additional files into PDF (if needed)
-//            $this->embedFilesInExistingPdf(
-//                storage_path('app/uploads/proposal/' . $fileNameRandom),
-//                storage_path('app/uploads/proposal-signed/' . $fileNameRandom),
-//                [storage_path('data.json'), storage_path('data.xml')]
-//            );
             });
 
             return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Berhasil mengupload file');
         } catch (Exception $e) {
-            return redirect()->back()->with('error', 'Gagal mengupload file');
+            return redirect()->back()->with('error', 'Gagal mengupload file: ' . $e->getMessage());
         }
     }
 
@@ -164,14 +162,10 @@ class ProposalSkripsiController extends Controller
             'judul_proposal' => $judulProposal,
             'file_proposal' => $fileName,
             'file_proposal_random' => $fileNameRandom,
-            'file_proposal_mime' => $mimeType,
             'status' => 1,
             'penilai1' => $pembimbing1,
             'penilai2' => $pembimbing2,
             'is_expired' => false,
-            'file_penilai1_mime' => $mimeType,
-            'file_penilai2_mime' => $mimeType,
-            'file_penilai3_mime' => $mimeType,
         ]);
     }
 
@@ -180,22 +174,27 @@ class ProposalSkripsiController extends Controller
         $uuid = $request->input('slug');
         try {
             DB::transaction(function () use ($uuid) {
+//                $data = ProposalSkripsi::where('uuid', $uuid)->firstOrFail();
+//                $kode = TopikPenelitianProposal::where('proposal_skripsi_id', $data->id)->get();
+//                $path = 'uploads/proposal/' . $data->file_proposal_random;
+//
+//                if (Storage::exists($path)) {
+//                    Storage::delete($path);
+//                    foreach ($kode as $row) {
+//                        $row->forceDelete();
+//                    }
+//                    $data->forceDelete();
+//                }
                 $data = ProposalSkripsi::where('uuid', $uuid)->firstOrFail();
-                $kode = TopikPenelitianProposal::where('proposal_skripsi_id', $data->id)->get();
                 $path = 'uploads/proposal/' . $data->file_proposal_random;
-
                 if (Storage::exists($path)) {
                     Storage::delete($path);
-                    foreach ($kode as $row) {
-                        $row->delete();
-                    }
-                    $data->delete();
                 }
+                $data->delete();
             });
             return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Data berhasil dihapus.');
         } catch (\Exception $e) {
-            dd($e);
-            return redirect()->back()->with('error', 'Gagal menghapus file');
+            return redirect()->back()->with('error', 'Gagal menghapus file ' . $e->getMessage());
         }
     }
 
@@ -213,12 +212,12 @@ class ProposalSkripsiController extends Controller
             ->with('penilaiPertama', function ($query) {
                 $query->select('id', 'nama');
             })
-            ->with('penilaiKedua', function ($query) {
-                $query->select('id', 'nama');
-            })
-            ->with('penilaiKetiga', function ($query) {
-                $query->select('id', 'nama');
-            })
+//            ->with('penilaiKedua', function ($query) {
+//                $query->select('id', 'nama');
+//            })
+//            ->with('penilaiKetiga', function ($query) {
+//                $query->select('id', 'nama');
+//            })
             ->where('mahasiswa_id', $user->id)
             ->where(function ($query) {
                 $query->where('penilai1', '!=', null);

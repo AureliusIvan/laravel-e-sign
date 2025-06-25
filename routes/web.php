@@ -43,7 +43,7 @@ Route::get('/', function () {
     $active = TahunAjaran::where('status_aktif', 1)->first();
     $data = DB::table('berita_acara')
         ->select('*')
-        ->where('tahun_ajaran_id', $active->id)
+//         ->where('tahun_ajaran_id', $active->id)
         ->orderBy('tanggal_awal', 'asc')
         ->get()
         ->toArray();

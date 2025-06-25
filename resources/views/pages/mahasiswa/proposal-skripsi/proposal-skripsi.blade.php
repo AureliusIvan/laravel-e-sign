@@ -269,8 +269,13 @@
                             </label>
                             <div class="input-group">
                                 <div class="custom-file">
-                                    <input type="file" class="custom-file-input" id="exampleInputFile" name="file"
-                                           accept="application/pdf" required>
+                                    <input
+                                        type="file"
+                                        class="custom-file-input"
+                                        id="exampleInputFile"
+                                        name="file"
+                                        accept="application/pdf" required
+                                    >
                                     <label class="custom-file-label" for="exampleInputFile">Choose file</label>
                                 </div>
                             </div>

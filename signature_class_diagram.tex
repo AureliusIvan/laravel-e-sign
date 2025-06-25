@@ -1,0 +1,258 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{tikz}
+\usepackage{tikz-uml}
+\usepackage{geometry}
+\usepackage[bahasa]{babel}
+
+\geometry{
+    left=1cm,
+    right=1cm,
+    top=2cm,
+    bottom=2cm,
+    landscape
+}
+
+\title{Class Diagram - Fitur Tandatangan dan Verifikasi Digital}
+\author{Sistem Informasi Manajemen Tugas Akhir}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.8, transform shape]
+
+% SignatureController Class
+\umlclass[x=0, y=10]{SignatureController}{
+    }{
+    + checkThesis() : Factory|View|Application \\
+    + signThesis(Request) : JsonResponse \\
+    + downloadSignedProposal(filename) : BinaryFileResponse \\
+    + verifyThesis() : Factory|View|Application \\
+    + uploadVerifyThesis(Request) : JsonResponse \\
+    + serveFile(filename) : BinaryFileResponse \\
+    + convertPdfToImages(filename) : array \\
+    - signThesisWithImageApproach(...) : void \\
+    - signThesisWithSimpleOverlay(...) : void \\
+    - embedXmlData(...) : void \\
+    - isPdfCompatibleWithFpdi(string) : bool \\
+    - extractEmbeddedFiles(pdfContent) : array \\
+    + generateXML(object) : bool|string \\
+    + arrayToXML(array, SimpleXMLElement) : void \\
+    + embedFilesInExistingPdf(...) : void
+}
+
+% ProposalSkripsi Model
+\umlclass[x=-8, y=6]{ProposalSkripsi}{
+    + id : int \\
+    + uuid : string \\
+    + proposal\_skripsi\_form\_id : int \\
+    + mahasiswa\_id : int \\
+    + judul\_proposal : text \\
+    + file\_proposal : string \\
+    + file\_proposal\_random : string \\
+    + file\_proposal\_mime : string \\
+    + status : tinyint \\
+    + penilai1 : int \\
+    + penilai2 : int \\
+    + penilai3 : int \\
+    + file\_penilai1 : string \\
+    + file\_random\_penilai1 : string \\
+    + status\_approval\_penilai1 : tinyint \\
+    + tanggal\_approval\_penilai1 : date \\
+    + status\_akhir : tinyint
+    }{
+    + proposalSkripsiForm() : BelongsTo \\
+    + mahasiswa() : BelongsTo \\
+    + penilaiPertama() : BelongsTo \\
+    + penilaiKedua() : BelongsTo \\
+    + penilaiKetiga() : BelongsTo
+}
+
+% Dosen Model
+\umlclass[x=-8, y=2]{Dosen}{
+    + id : int \\
+    + uuid : string \\
+    + user\_id : int \\
+    + nid : string \\
+    + nama : string \\
+    + gelar : string \\
+    + program\_studi\_id : int
+    }{
+    + user() : BelongsTo \\
+    + penilaiPertama() : HasMany \\
+    + penilaiKedua() : HasMany \\
+    + penilaiKetiga() : HasMany
+}
+
+% User Model
+\umlclass[x=-8, y=-2]{User}{
+    + id : int \\
+    + uuid : string \\
+    + email : string \\
+    + password : string \\
+    + role : string
+    }{
+    + dosenDetail() : HasOne \\
+    + mahasiswaDetail() : HasOne
+}
+
+% Mahasiswa Model
+\umlclass[x=-14, y=2]{Mahasiswa}{
+    + id : int \\
+    + uuid : string \\
+    + user\_id : int \\
+    + nim : string \\
+    + nama : string \\
+    + program\_studi\_id : int \\
+    + angkatan : int \\
+    + status\_aktif\_skripsi : tinyint
+    }{
+    + user() : BelongsTo \\
+    + proposalSkripsi() : HasMany
+}
+
+% ProposalSkripsiForm Model
+\umlclass[x=-14, y=6]{ProposalSkripsiForm}{
+    + id : int \\
+    + uuid : string \\
+    + tahun\_ajaran\_id : int \\
+    + program\_studi\_id : int \\
+    + judul\_form : text \\
+    + keterangan : text \\
+    + dibuka : datetime \\
+    + ditutup : datetime \\
+    + deadline\_penilaian : datetime \\
+    + publish\_dosen : tinyint
+    }{
+    + proposalSkripsi() : HasMany
+}
+
+% TahunAjaran Model
+\umlclass[x=-14, y=10]{TahunAjaran}{
+    + id : int \\
+    + tahun : int \\
+    + semester : string \\
+    + status\_aktif : tinyint
+    }{
+}
+
+% External Libraries
+\umlclass[x=6, y=14, fill=lightgray]{QRCode}{
+    \textit{<<External Library>>}
+    }{
+    + \_\_construct(QROptions) \\
+    + render(data, outputPath) : void
+}
+
+\umlclass[x=12, y=14, fill=lightgray]{QROptions}{
+    \textit{<<External Library>>} \\
+    + version : int \\
+    + outputType : string \\
+    + eccLevel : string \\
+    + scale : int \\
+    + margin : int \\
+    + imageBase64 : bool \\
+    + pngTransparency : bool \\
+    + bgColor : array
+    }{
+}
+
+\umlclass[x=6, y=10, fill=lightgray]{Fpdi}{
+    \textit{<<External Library>>}
+    }{
+    + setSourceFile(pdfPath) : int \\
+    + addPage() : void \\
+    + useTemplate(templateId) : void \\
+    + Image(imagePath, x, y, width, height) : void \\
+    + Output(filename, destination) : void
+}
+
+\umlclass[x=12, y=10, fill=lightgray]{Parser}{
+    \textit{<<External Library>>}
+    }{
+    + parseFile(pdfPath) : Document
+}
+
+\umlclass[x=6, y=6, fill=lightgray]{Pdf}{
+    \textit{<<External Library>>}
+    }{
+    + setPage(pageNumber) : Pdf \\
+    + saveImage(outputPath) : void
+}
+
+% Relationships - Controller Dependencies
+\umldep[mult1=uses, pos1=0.2]{SignatureController}{ProposalSkripsi}
+\umldep[mult1=uses, pos1=0.8]{SignatureController}{Dosen}
+\umldep[mult1=uses]{SignatureController}{QRCode}
+\umldep[mult1=uses]{SignatureController}{Fpdi}
+\umldep[mult1=uses]{SignatureController}{Parser}
+\umldep[mult1=uses]{SignatureController}{Pdf}
+
+% QRCode Dependencies
+\umldep[mult1=uses]{QRCode}{QROptions}
+
+% Model Relationships
+\umlassoc[mult1=1, mult2=*, pos1=0.2, pos2=0.8]{ProposalSkripsiForm}{ProposalSkripsi}
+\umlassoc[mult1=1, mult2=*, pos1=0.2, pos2=0.8]{Mahasiswa}{ProposalSkripsi}
+\umlassoc[mult1=1, mult2=*, pos1=0.8, pos2=0.2, name=penilai1]{Dosen}{ProposalSkripsi}
+
+% User Relationships
+\umlassoc[mult1=1, mult2=1, pos1=0.8, pos2=0.2]{User}{Dosen}
+\umlassoc[mult1=1, mult2=1, pos1=0.2, pos2=0.8]{User}{Mahasiswa}
+
+% Additional relationships
+\umlassoc[mult1=1, mult2=*, pos1=0.8, pos2=0.2]{TahunAjaran}{ProposalSkripsiForm}
+
+\end{tikzpicture}
+\end{figure}
+
+\section{Deskripsi Komponen}
+
+\subsection{SignatureController}
+Controller utama yang menangani fitur tandatangan dan verifikasi digital:
+\begin{itemize}
+    \item \textbf{Fitur Tandatangan:} checkThesis(), signThesis(), downloadSignedProposal()
+    \item \textbf{Fitur Verifikasi:} verifyThesis(), uploadVerifyThesis(), extractEmbeddedFiles()
+    \item \textbf{Utility Methods:} convertPdfToImages(), embedXmlData(), generateXML()
+\end{itemize}
+
+\subsection{Model Relationships}
+\begin{itemize}
+    \item \textbf{ProposalSkripsi:} Entitas utama yang ditandatangani
+    \item \textbf{Dosen:} Penandatangan (penilai1, penilai2, penilai3)
+    \item \textbf{Mahasiswa:} Pemilik proposal skripsi
+    \item \textbf{User:} Base authentication untuk semua user
+\end{itemize}
+
+\subsection{External Libraries}
+\begin{itemize}
+    \item \textbf{QRCode \& QROptions:} Generate QR code untuk tandatangan
+    \item \textbf{Fpdi:} Manipulasi PDF untuk menambahkan tandatangan
+    \item \textbf{Parser:} Parse PDF untuk verifikasi
+    \item \textbf{Pdf:} Konversi PDF ke format image
+\end{itemize}
+
+\subsection{Alur Kerja}
+\subsubsection{Signature Process:}
+\begin{enumerate}
+    \item Dosen memilih proposal melalui checkThesis()
+    \item System generate QR code dengan data dosen dan timestamp
+    \item PDF dimanipulasi menggunakan Fpdi untuk menambahkan QR code
+    \item Data XML di-embed ke PDF untuk verifikasi
+    \item File signed disimpan dengan nama baru
+\end{enumerate}
+
+\subsubsection{Verification Process:}
+\begin{enumerate}
+    \item Upload PDF melalui uploadVerifyThesis()
+    \item Extract embedded XML data menggunakan extractEmbeddedFiles()
+    \item Parse dan validasi data signature
+    \item Tampilkan hasil verifikasi
+\end{enumerate}
+
+\end{document} 

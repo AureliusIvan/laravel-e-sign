@@ -1,0 +1,5 @@
+# Exclude data directory containing MySQL files
+data/
+node_modules/
+vendor/
+.git/

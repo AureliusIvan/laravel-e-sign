@@ -1,14 +1,64 @@
 services:
-    mysql:
-        image: mysql:9.0.1
-        container_name: mysql
+    app:
+        tty: true
+#        network_mode: host
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: laravel_app
+        working_dir: /var/www/html
+        volumes:
+            - ./:/var/www/html:delegated
+            # Use anonymous volumes to protect these directories
+            - /var/www/html/vendor
+            - /var/www/html/node_modules
+        environment:
+            # Ensure Laravel uses container paths, not host paths
+            APP_URL: http://0.0.0.0:8000
+            APP_BASE_PATH: /var/www/html
+            CACHE_DRIVER: file
+            SESSION_DRIVER: file
+            VIEW_COMPILED_PATH: /var/www/html/storage/framework/views
+        ports:
+            - "8000:8000"
+            - "9000:9000"
+        depends_on:
+            - db
+        networks:
+            - laravel_network
+
+    webserver:
+        image: nginx:alpine
+        container_name: laravel_webserver
+        ports:
+            - "80:80"
+        volumes:
+            - ./:/var/www/html:ro
+            - ./nginx:/etc/nginx/conf.d
+        depends_on:
+            - app
+        networks:
+            - laravel_network
+
+    db:
+#        network_mode: host
+        image: mysql:8.0
+        container_name: laravel_db
+        restart: unless-stopped
         environment:
             MYSQL_ROOT_PASSWORD: root
-            MYSQL_DATABASE: mydb
-            MYSQL_USER: user
-            MYSQL_PASSWORD: password
+            MYSQL_DATABASE: laravel
+            MYSQL_USER: laravel
+            MYSQL_PASSWORD: secret
+        volumes:
+            - db_data:/var/lib/mysql
         ports:
             - "3306:3306"
-        volumes:
-            - ./mysql:/var/lib/mysql
-            - ./backup:/backup
+        networks:
+            - laravel_network
+
+volumes:
+    db_data:
+
+networks:
+    laravel_network:

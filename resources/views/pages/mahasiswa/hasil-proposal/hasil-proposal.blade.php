@@ -77,14 +77,14 @@ $now = date('Y-m-d H:i:s');
                                     <tr>
                                         <th style="width: 25%;">Status Proposal Skripsi</th>
                                         <td>
-                                            @if ($row->status_akhir === 1)
+                                            @if ($row->signed_proposal)
                                             <span class="text-primary font-weight-bold">
                                                 Diterima
                                             </span>
-                                            @elseif ($row->status_akhir === 0)
+                                            @elseif ($row->signed_proposal)
                                             <span class="text-danger font-weight-bold">
                                                 Ditolak
-                                            </span>
+                                            p
                                             @endif
                                         </td>
                                     </tr>

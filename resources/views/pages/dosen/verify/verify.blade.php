@@ -13,7 +13,9 @@ nav')
             <div class="container-fluid">
                 <div class="row">
                     <div class="col-sm-6">
-                        <h1 class="font-weight-bold">Verifikasi Proposal Skripsi</h1>
+                        <h1 class="font-weight-bold">
+                            Verify Dokumen
+                            </h1>
                     </div>
                 </div>
             </div>
@@ -53,7 +55,7 @@ nav')
                                 <!-- File Koreksi -->
                                 <div class="form-group">
                                     <label for="exampleInputFile">
-                                        Silahkan upload file proposal RTI
+                                        Please upload your document
                                     </label>
                                     <div class="input-group">
                                         <div class="custom-file">
@@ -74,7 +76,7 @@ nav')
                                 <!-- Submit Button -->
                                 <div class="d-flex flex-row">
                                     <div class="mr-2">
-                                        <input type="submit" class="btn btn-primary" name="action" value="Submit"/>
+                                        <input type="submit" class="btn btn-primary" name="action" value="Verify Documents"/>
                                     </div>
                                 </div>
 
@@ -201,7 +203,7 @@ nav')
                                             &times;
                                         </button>
                                         <h5><i class="icon fas fa-ban"></i>Failed!</h5>
-                                        Dokumen tidak valid
+                                        Verification FAILED: Document content does not match the signature
                                     </div>
                                 @endif
                             </form>

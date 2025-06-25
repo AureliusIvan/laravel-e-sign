@@ -1,20 +1,29 @@
 /.phpunit.cache
+.phpunit.result.cache
 /node_modules
 /public/build
 /public/hot
 /public/storage
+# User uploads and generated files
+/public/*.jpg
+/public/*.jpeg
+/public/*.png
+/public/*.gif
+/public/*.pdf
+/public/test.*
 /storage/*.key
 /vendor
-.env
-.env.backup
-.env.production
+.env*
 .phpactor.json
-.phpunit.result.cache
 Homestead.json
 Homestead.yaml
 auth.json
-npm-debug.log
-yarn-error.log
+*.log
 /.fleet
 /.idea
 /.vscode
+
+# Database files
+/data/db/
+/mysql/
+data/mysql_upgrade_info

@@ -14,7 +14,7 @@ if your database is not working properly, you can reset the database by followin
 
 ```bash
 # Admin
-email: dosen1@umn.ac.id 
+email: admin2@umn.ac.id
 password: password
 
 # Dosen

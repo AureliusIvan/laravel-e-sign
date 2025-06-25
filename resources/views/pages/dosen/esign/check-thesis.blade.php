@@ -10,6 +10,12 @@
             height: 80vh;
             overflow: hidden;
         }
+
+        #doc-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
     </style>
 @endsection
 
@@ -177,7 +183,8 @@
                     <!-- End -->
                 </form>
 
-                <div id="doc-container" style="width: 100%; height: 600px; overflow-y: scroll; border: 1px solid #ddd;"></div>
+                <div id="doc-container"
+                     style="width: 100%; height: fit-content; background-position: center; object-fit: contain; overflow-y: scroll; border: 1px solid #ddd;"></div>
                 <form id="signature-form" action={{ route('sign.thesis') }} method="POST" hidden="">
                     @csrf
                     <input type="hidden" name="x">
@@ -224,7 +231,10 @@
             diterimaRadio.addEventListener('change', toggleSignatureForm);
             ditolakRadio.addEventListener('change', toggleSignatureForm);
 
-            const url = '{{ route('proposal.serve', basename($d->file_proposal_random)) }}';
+            let url;
+            @if (!empty($d) && isset($d->file_proposal_random))
+                url = '{{ route('proposal.serve', basename($d->file_proposal_random)) }}';
+            @endif
             const container = document.getElementById('doc-container');  // Holds all canvases
 
             pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -252,7 +262,7 @@
                 for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
                     pdf.getPage(pageNumber).then(page => {
                         const scale = 1.5;
-                        const viewport = page.getViewport({ scale });
+                        const viewport = page.getViewport({scale});
 
                         const canvas = document.createElement('canvas');
                         canvas.style.marginBottom = '10px';
@@ -263,7 +273,7 @@
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
 
-                        page.render({ canvasContext: context, viewport: viewport })
+                        page.render({canvasContext: context, viewport: viewport})
                             .promise.then(() => console.log(`Page ${pageNumber} rendered.`))
                             .catch(err => console.error('Error rendering page:', err));
                     }).catch(err => console.error(`Error loading page ${pageNumber}:`, err));
@@ -280,7 +290,7 @@
                 const y = mouseY - containerOffset.top + scrollTop - 25;
 
                 if (x >= 0 && y >= 0 && x <= container.scrollWidth - 50 && y <= container.scrollHeight - 50) {
-                    $qrBox.css({ left: `${x}px`, top: `${y}px` }).show();
+                    $qrBox.css({left: `${x}px`, top: `${y}px`}).show();
                 } else {
                     $qrBox.hide();
                 }

@@ -34,6 +34,7 @@ return [
             'driver' => 'local',
             'root' => storage_path('app'),
             'throw' => false,
+            'max_upload_filesize' => env('MAX_UPLOAD_FILESIZE', 9999999999), // dalam KB
         ],
 
         'public' => [

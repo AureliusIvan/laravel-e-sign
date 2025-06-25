@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('nama');
             $table->foreignIdFor(ProgramStudi::class);
             $table->boolean('status_aktif')->default(true);
+            $table->string('gelar', 100)->nullable();
             $table->timestamps();
         });
     }
