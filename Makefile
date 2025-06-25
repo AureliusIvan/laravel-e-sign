@@ -33,3 +33,7 @@ seed:
 
 prod-down:
 	@docker compose -f prod.docker-compose.yml down
+
+
+tunnel:
+	@cloudflared tunnel --config tunnel-config.yml run &
