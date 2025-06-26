@@ -41,7 +41,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Pengumpulan Revisi Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Pengumpulan Revisi Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -387,7 +387,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h4 class="modal-title">Pengumpulan Revisi Proposal Skripsi</h4>
+                <h4 class="modal-title">Pengumpulan Revisi Skripsi</h4>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
@@ -428,7 +428,7 @@
 
                     <div class="form-group">
                         <label for="exampleInputFile">
-                            Silahkan upload file revisi proposal skripsi anda (max 30MB) <span
+                            Silahkan upload file revisi Skripsi anda (max 30MB) <span
                                 class="text-danger">*</span>
                         </label>
                         <div class="input-group">
@@ -460,7 +460,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h4 class="modal-title">Pengumpulan Revisi Proposal Skripsi</h4>
+                <h4 class="modal-title">Pengumpulan Revisi Skripsi</h4>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
@@ -502,7 +502,7 @@
 
                     <div class="form-group">
                         <label for="exampleInputFile">
-                            Silahkan upload file revisi proposal skripsi anda (max 30MB) <span
+                            Silahkan upload file revisi Skripsi anda (max 30MB) <span
                                 class="text-danger">*</span>
                         </label>
                         <div class="input-group">

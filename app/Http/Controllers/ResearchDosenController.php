@@ -31,9 +31,7 @@ class ResearchDosenController extends Controller
     public function show()
     {
         $user = Dosen::where('user_id', Auth::user()->id)->firstOrFail();
-        $data = Dosen::whereHas('researchDosen', function ($query) use ($user) {
-            $query->where('program_studi_id', $user->program_studi_id);
-        })->with(['researchDosen.researchList' => function ($query) use ($user) {
+        $data = Dosen::with(['researchDosen.researchList' => function ($query) use ($user) {
             $query->where('program_studi_id', $user->program_studi_id);
         }])->find($user->id);
 

@@ -25,7 +25,7 @@ class ProposalSkripsiFormController extends Controller
             ->get();
         return view('pages.prodi.form.proposal-skripsi.proposal-form', [
             'title' => 'Form',
-            'subtitle' => 'Proposal Skripsi',
+            'subtitle' => 'Skripsi',
             'data' => $data,
         ]);
     }
@@ -37,7 +37,7 @@ class ProposalSkripsiFormController extends Controller
         $prodi = ProgramStudi::where('id', $user->program_studi_id)->first();
         return view('pages.prodi.form.proposal-skripsi.add-proposal-form', [
             'title' => 'Form',
-            'subtitle' => 'Tambah Form Proposal Skripsi',
+            'subtitle' => 'Tambah Form Skripsi',
             'tahun' => $active->uuid,
             'prodi' => $prodi->uuid,
         ]);
@@ -104,7 +104,7 @@ class ProposalSkripsiFormController extends Controller
 
             return view('pages.prodi.form.proposal-skripsi.edit-proposal-form', [
                 'title' => 'Form',
-                'subtitle' => 'Edit Form Proposal Skripsi',
+                'subtitle' => 'Edit Form Skripsi',
                 'data' => $data,
                 'isLinked' => $isLinked,
             ]);

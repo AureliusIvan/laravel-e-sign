@@ -9,7 +9,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Form Revisi Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Form Revisi Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -43,7 +43,7 @@
                         <div class="card-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">
-                                    Form Revisi Proposal Skripsi
+                                    Form Revisi Skripsi
                                 </h3>
                                 <div class="card-tools">
                                     <a href="{{ route('revisi-proposal.skripsi.form.create') }}" class="btn btn-primary btn-sm">
@@ -64,7 +64,7 @@
                                 <thead>
                                     <tr>
                                         <th style="width: 5%;">#</th>
-                                        <th style="width: 20%;">Judul Proposal Skripsi Form</th>
+                                        <th style="width: 20%;">Judul Skripsi Form</th>
                                         <th>Dibuka</th>
                                         <th>Ditutup</th>
                                         <th>Deadline Penilaian</th>

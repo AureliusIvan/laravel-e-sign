@@ -67,24 +67,24 @@
                     </a>
                 </li>
 
-                <!-- Proposal Skripsi -->
+                <!-- Skripsi -->
                 <li class="nav-item">
                     <a href="{{ route('proposal.skripsi.pengumpulan') }}"
-                        class="nav-link {{ ($title === 'Proposal Skripsi') ? 'active' : '' }}">
+                        class="nav-link {{ ($title === 'Skripsi') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-file"></i>
                         <p>
-                            Proposal Skripsi
+                            Skripsi
                         </p>
                     </a>
                 </li>
 
-                <!-- Hasil Proposal Skripsi -->
+                <!-- Hasil Skripsi -->
                 <li class="nav-item">
                     <a href="{{ route('proposal.skripsi.hasil') }}"
-                        class="nav-link {{ ($title === 'Hasil Proposal Skripsi') ? 'active' : '' }}">
+                        class="nav-link {{ ($title === 'Hasil Skripsi') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-file"></i>
                         <p>
-                            Hasil Proposal Skripsi
+                            Hasil Skripsi
                         </p>
                     </a>
                 </li>

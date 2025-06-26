@@ -32,7 +32,7 @@
             <div class="container-fluid">
                 <div class="row">
                     <div class="col-sm-6">
-                        <h1 class="font-weight-bold">Periksa Proposal Skripsi</h1>
+                        <h1 class="font-weight-bold">Periksa Skripsi</h1>
                     </div>
                 </div>
             </div>
@@ -68,7 +68,7 @@
                             <div class="card-header">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h3 class="card-title">
-                                        Periksa Proposal Skripsi
+                                        Periksa Skripsi
                                     </h3>
                                     <div class="card-tools">
                                         <button type="button" class="btn btn-tool" data-card-widget="collapse"
@@ -86,7 +86,7 @@
                                     <thead>
                                     <tr>
                                         <th style="width: 5%;">#</th>
-                                        <th style="width: 30%;">Judul Proposal Skripsi</th>
+                                        <th style="width: 30%;">Judul Skripsi</th>
                                         <th>Mahasiswa</th>
                                         <th style="width: 15%;">Details</th>
                                         <th style="width: 15%;">
@@ -98,7 +98,10 @@
                                     @foreach ($data as $d)
                                         <tr data-child-value="{{ $d->keterangan }}">
                                             <td>{{ $loop->iteration }}</td>
-                                            <td>{{ $d->judul_proposal }}</td>
+                                            <td>
+                                                <strong>ID:</strong> {{ $d->judul_proposal }}<br>
+                                                <strong>EN:</strong> {{ $d->judul_proposal_en ?? 'Not provided' }}
+                                            </td>
                                             <td>{{ $d->mahasiswa->nama }}</td>
                                             <td>
                                                 <button type="button" class="btn btn-primary btn-sm btn-open-modal"

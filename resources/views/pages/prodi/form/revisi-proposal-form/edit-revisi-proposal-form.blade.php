@@ -8,7 +8,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Edit Form Revisi Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Edit Form Revisi Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -41,7 +41,7 @@
                         <!-- Header -->
                         <div class="card-header">
                             <h3 class="card-title">
-                                Edit Form Revisi Proposal Skripsi
+                                Edit Form Revisi Skripsi
                             </h3>
                             <div class="card-tools">
                                 @if ($isLinked === false)
@@ -66,9 +66,9 @@
                                 @csrf
                                 @method('PUT')
 
-                                <!-- Proposal Skripsi Form -->
+                                <!-- Skripsi Form -->
                                 <div class="form-group">
-                                    <label for="proposal_form">Pilih Form Proposal Skripsi</label>
+                                    <label for="proposal_form">Pilih Form Skripsi</label>
                                     <div class="input-group">
                                         <select name="proposal_form" id="proposal_form" class="form-control" required>
                                             <option value="">Pilih ...</option>

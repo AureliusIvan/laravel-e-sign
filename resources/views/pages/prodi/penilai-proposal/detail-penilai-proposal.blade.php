@@ -39,7 +39,7 @@ $params = Request::segment(3);
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Penilai Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Penilai Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -95,7 +95,7 @@ $params = Request::segment(3);
                                 <thead>
                                     <tr>
                                         <th style="width: 3%;">#</th>
-                                        <th style="width: 20%;">Proposal Skripsi</th>
+                                        <th style="width: 20%;">Skripsi</th>
                                         <th>Topik Penelitian</th>
                                         <th style="width: 15%;">Penilai 1</th>
                                         <th style="width: 15%;">Penilai 2</th>

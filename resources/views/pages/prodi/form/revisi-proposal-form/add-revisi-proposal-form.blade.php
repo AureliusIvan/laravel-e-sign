@@ -8,7 +8,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Buat Form Revisi Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Buat Form Revisi Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -41,7 +41,7 @@
                         <!-- Header -->
                         <div class="card-header">
                             <h3 class="card-title">
-                                Tambah Form Revisi Proposal Skripsi
+                                Tambah Form Revisi Skripsi
                             </h3>
                         </div>
 
@@ -53,9 +53,9 @@
                                 <input type="hidden" name="tahun_ajaran" value="{{ $tahun }}">
                                 <input type="hidden" name="program_studi" value="{{ $prodi }}">
 
-                                <!-- Proposal Skripsi Form -->
+                                <!-- Skripsi Form -->
                                 <div class="form-group">
-                                    <label for="proposal_form">Pilih Form Proposal Skripsi</label>
+                                    <label for="proposal_form">Pilih Form Skripsi</label>
                                     <div class="input-group">
                                         <select name="proposal_form" id="proposal_form" class="form-control" required>
                                             <option value="">Pilih ...</option>

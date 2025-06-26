@@ -8,7 +8,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Buat Form Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Buat Form Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -41,7 +41,7 @@
                         <!-- Header -->
                         <div class="card-header">
                             <h3 class="card-title">
-                                Tambah Form Proposal Skripsi
+                                Tambah Form Skripsi
                             </h3>
                         </div>
 

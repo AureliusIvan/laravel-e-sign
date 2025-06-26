@@ -180,7 +180,7 @@
                 <!-- End -->
 
                 <!-- Tahun Proposal RTI Habis -->
-                <h6 class="font-weight-bold">Tahun Proposal Skripsi dengan Proposal RTI Habis</h6>
+                <h6 class="font-weight-bold">Tahun Skripsi dengan Proposal RTI Habis</h6>
                 <div class="row">
                   <div class="col-sm-6">
                     <div class="form-group">
@@ -235,7 +235,7 @@
                 <!-- End -->
 
                 <!-- Tahun Proposal Baru Habis -->
-                <h6 class="font-weight-bold">Tahun Proposal Skripsi Baru Habis (Default: 1,5 tahun)</h6>
+                <h6 class="font-weight-bold">Tahun Skripsi Baru Habis (Default: 1,5 tahun)</h6>
                 <div class="row">
                   <div class="col-sm-6">
                     <div class="form-group">
@@ -291,11 +291,11 @@
                 <!-- End -->
 
 
-                <!-- Penamaan Proposal Skripsi -->
+                <!-- Penamaan Skripsi -->
                 <!-- Yes or No -->
                 <div class="form-group">
                   <label for="penamaan_proposal">
-                    Penamaan Proposal Skripsi (*File yang diupload mahasiswa akan dinamai secara otomatis)
+                    Penamaan Skripsi (*File yang diupload mahasiswa akan dinamai secara otomatis)
                   </label>
                   <div class="icheck-primary">
                     <input type="radio" id="radioPrimary3" name="penamaan_proposal" value="1" checked required>
@@ -312,7 +312,7 @@
                 </div>
 
                 <h6 class="font-weight-bold">
-                  Format Penamaan Proposal Skripsi
+                  Format Penamaan Skripsi
                 </h6>
                 <div class="row">
                   <div class="col-sm-4">
@@ -326,7 +326,7 @@
 
                           <option value="nim" selected>NIM</option>
                           <option value="nama">Nama</option>
-                          <option value="judul">Proposal Skripsi</option>
+                          <option value="judul">Skripsi</option>
                         </select>
                         <div class="input-group-append">
                           <div class="input-group-text">
@@ -408,11 +408,11 @@
                 <hr class="bg-gray-dark">
                 <!-- End -->
 
-                <!-- Penamaan Revisi Proposal Skripsi -->
+                <!-- Penamaan Revisi Skripsi -->
                 <!-- Yes or No -->
                 <div class="form-group">
                   <label for="penamaan_revisi_proposal">
-                    Penamaan Revisi Proposal Skripsi (*File yang diupload mahasiswa akan dinamai secara otomatis)
+                    Penamaan Revisi Skripsi (*File yang diupload mahasiswa akan dinamai secara otomatis)
                   </label>
                   <div class="icheck-primary">
                     <input type="radio" id="radioPrimary4" name="penamaan_revisi_proposal" value="1" checked required>
@@ -429,7 +429,7 @@
                 </div>
 
                 <h6 class="font-weight-bold">
-                  Format Penamaan Revisi Proposal Skripsi
+                  Format Penamaan Revisi Skripsi
                 </h6>
                 <div class="row">
                   <div class="col-sm-4">
@@ -759,10 +759,10 @@
                 <hr class="bg-gray-dark">
                 <!-- End -->
 
-                <!-- Jumlah Voting Setuju untuk Proposal Skripsi dengan Satu Pembimbing -->
+                <!-- Jumlah Voting Setuju untuk Skripsi dengan Satu Pembimbing -->
                 <div class="form-group">
-                  <label for="jumlah_setuju_proposal">Jumlah Voting Setuju untuk Proposal Skripsi
-                    Mahasiswa yang Pembimbingnya Hanya Satu agar Proposal Skripsinya dapat Digunakan (*Default
+                  <label for="jumlah_setuju_proposal">Jumlah Voting Setuju untuk Skripsi
+                    Mahasiswa yang Pembimbingnya Hanya Satu agar Skripsinya dapat Digunakan (*Default
                     Semua)</label>
                   <div class="input-group">
                     <input type="number" id="jumlah_setuju_proposal" name="jumlah_setuju_proposal" class="form-control @error('jumlah_setuju_proposal')

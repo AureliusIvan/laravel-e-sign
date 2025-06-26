@@ -378,13 +378,13 @@ class DatabaseSeeder extends Seeder
                 ]
             );
 
-            // Create proposal skripsi form (for thesis purpose)
+            // Create Skripsi form (for thesis purpose)
             $proposalForm = ProposalSkripsiForm::updateOrCreate(
-                ['judul_form' => 'Form Proposal Skripsi 2021'],
+                ['judul_form' => 'Form Skripsi 2021'],
                 [
                     'tahun_ajaran_id' => $tahunAjaran->id,
                     'program_studi_id' => 1,
-                    'keterangan' => 'Form untuk mengumpulkan proposal skripsi tahun ajaran 2021 semester ganjil',
+                    'keterangan' => 'Form untuk mengumpulkan Skripsi tahun ajaran 2021 semester ganjil',
                     'dibuka' => now()->subDays(30),
                     'ditutup' => now()->addDays(30),
                     'deadline_penilaian' => now()->addDays(60),
@@ -420,7 +420,7 @@ class DatabaseSeeder extends Seeder
                 ]
             );
 
-            // Create sample proposal skripsi (for thesis purpose)
+            // Create sample Skripsi (for thesis purpose)
             $proposalSkripsi = ProposalSkripsi::updateOrCreate(
                 ['mahasiswa_id' => $mahasiswa->id],
                 [

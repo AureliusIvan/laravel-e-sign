@@ -68,16 +68,22 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>{{ $data->nama }}</td>
-                                        <td>
-                                            @foreach ($data->researchDosen as $row)
-                                            <p class="mb-0">
-                                                {{ $row->researchList->topik_penelitian . ' ' }}
-                                            </p>
-                                            @endforeach
-                                        </td>
-                                    </tr>
+                                    @if ($data && $data->researchDosen->isNotEmpty())
+                                        <tr>
+                                            <td>{{ $data->nama }}</td>
+                                            <td>
+                                                @foreach ($data->researchDosen as $row)
+                                                    <p class="mb-0">
+                                                        {{ $row->researchList->topik_penelitian . ' ' }}
+                                                    </p>
+                                                @endforeach
+                                            </td>
+                                        </tr>
+                                    @else
+                                        <tr>
+                                            <td colspan="2" class="text-center">Tidak ada data topik penelitian.</td>
+                                        </tr>
+                                    @endif
                                 </tbody>
                             </table>
                         </div>

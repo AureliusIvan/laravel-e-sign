@@ -157,15 +157,15 @@
           </a>
           <ul class="nav nav-treeview">
             <li class="nav-item">
-              <a href="#" class="nav-link {{ ($subtitle === 'Proposal Skripsi') ? 'active' : '' }}">
+              <a href="#" class="nav-link {{ ($subtitle === 'Skripsi') ? 'active' : '' }}">
                 <i class="nav-icon far fa-circle"></i>
-                <p>Proposal Skripsi</p>
+                <p>Skripsi</p>
               </a>
             </li>
             <li class="nav-item">
-              <a href="#" class="nav-link {{ ($subtitle === 'Revisi Proposal Skripsi') ? 'active' : '' }}">
+              <a href="#" class="nav-link {{ ($subtitle === 'Revisi Skripsi') ? 'active' : '' }}">
                 <i class="nav-icon far fa-circle"></i>
-                <p>Revisi Proposal Skripsi</p>
+                <p>Revisi Skripsi</p>
               </a>
             </li>
             <li class="nav-item">

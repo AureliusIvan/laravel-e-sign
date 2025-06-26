@@ -12,7 +12,7 @@ $now = date('Y-m-d H:i:s');
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Hasil Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Hasil Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -69,13 +69,19 @@ $now = date('Y-m-d H:i:s');
                             <div class="table-responsive">
                                 <table class="table">
                                     <tr>
-                                        <th style="width: 25%;">Judul Proposal Skripsi</th>
+                                        <th style="width: 25%;">Judul Proposal (Indonesia)</th>
                                         <td>
                                             {{ $row->judul_proposal }}
                                         </td>
                                     </tr>
                                     <tr>
-                                        <th style="width: 25%;">Status Proposal Skripsi</th>
+                                        <th style="width: 25%;">Judul Proposal (English)</th>
+                                        <td>
+                                            {{ $row->judul_proposal_en ?? 'Not provided' }}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th style="width: 25%;">Status Skripsi</th>
                                         <td>
                                             @if ($row->signed_proposal)
                                             <span class="text-primary font-weight-bold">

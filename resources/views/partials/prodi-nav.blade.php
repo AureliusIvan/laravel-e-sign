@@ -118,9 +118,9 @@
                         </li>
                         <li class="nav-item">
                             <a href="{{ route('proposal.skripsi.form') }}"
-                                class="nav-link {{ ($subtitle === 'Proposal Skripsi' || $subtitle === 'Tambah Form Proposal Skripsi' || $subtitle === 'Edit Form Proposal Skripsi') ? 'active' : '' }}">
+                                class="nav-link {{ ($subtitle === 'Skripsi' || $subtitle === 'Tambah Form Skripsi' || $subtitle === 'Edit Form Skripsi') ? 'active' : '' }}">
                                 <i class="nav-icon far fa-circle"></i>
-                                <p>Proposal Skripsi</p>
+                                <p>Skripsi</p>
                             </a>
                         </li>
                         <li class="nav-item">

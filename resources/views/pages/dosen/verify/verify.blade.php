@@ -105,9 +105,15 @@
                                             </tr>
 
                                             <tr>
-                                                <td>Judul Laporan</td>
+                                                <td>Judul Laporan (Indonesia)</td>
                                                 <td> :</td>
                                                 <td>{{ $Judul_Laporan }}</td>
+                                            </tr>
+
+                                            <tr>
+                                                <td>Judul Laporan (English)</td>
+                                                <td> :</td>
+                                                <td>{{ $Judul_Laporan_EN ?: 'Not provided' }}</td>
                                             </tr>
 
                                             <tr>

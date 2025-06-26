@@ -49,7 +49,7 @@ class ProposalSkripsiController extends Controller
             $result = [];
         }
         return view('pages.mahasiswa.proposal-skripsi.proposal-skripsi', [
-            'title' => 'Proposal Skripsi',
+            'title' => 'Skripsi',
             'subtitle' => 'Pengumpulan',
             'data' => $data,
             'result' => $result,
@@ -67,6 +67,7 @@ class ProposalSkripsiController extends Controller
     {
         $request->validate([
             'judul_proposal' => ['required', 'string'],
+            'judul_proposal_en' => ['required', 'string'],
             'file' => ['required', 'file', 'mimes:pdf'],
             'topik_penelitian' => ['required'],
             'id_form' => ['required'],
@@ -100,6 +101,7 @@ class ProposalSkripsiController extends Controller
 
                 if ($this->shouldApplyNamingConvention($isPenamaan)) {
                     $this->validateProposalTitle($request->judul_proposal);
+                    $this->validateProposalTitle($request->judul_proposal_en);
 
                     $fileName = $this->generateFileName($isPenamaan->pengaturanDetail->penamaan_proposal, $user, esc($request->judul_proposal));
                 } else {
@@ -108,7 +110,7 @@ class ProposalSkripsiController extends Controller
 
                 $this->storeFile($file, $fileNameRandom);
 
-                $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $fileName, $fileNameRandom, $file->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
+                $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $request->judul_proposal_en, $fileName, $fileNameRandom, $file->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
             });
 
             return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Berhasil mengupload file');
@@ -154,12 +156,13 @@ class ProposalSkripsiController extends Controller
     /**
      * Create a new ProposalSkripsi record.
      */
-    private function createProposalSkripsi($formId, $mahasiswaId, $judulProposal, $fileName, $fileNameRandom, $mimeType, $pembimbing1, $pembimbing2)
+    private function createProposalSkripsi($formId, $mahasiswaId, $judulProposal, $judulProposalEn, $fileName, $fileNameRandom, $mimeType, $pembimbing1, $pembimbing2)
     {
         ProposalSkripsi::create([
             'proposal_skripsi_form_id' => $formId,
             'mahasiswa_id' => $mahasiswaId,
             'judul_proposal' => $judulProposal,
+            'judul_proposal_en' => $judulProposalEn,
             'file_proposal' => $fileName,
             'file_proposal_random' => $fileNameRandom,
             'status' => 1,
@@ -230,7 +233,7 @@ class ProposalSkripsiController extends Controller
             $result = [];
         }
         return view('pages.mahasiswa.hasil-proposal.hasil-proposal', [
-            'title' => 'Hasil Proposal Skripsi',
+            'title' => 'Hasil Skripsi',
             'subtitle' => '',
             'data' => $data,
             'result' => $result,

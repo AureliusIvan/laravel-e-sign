@@ -20,7 +20,7 @@ $now = date('Y-m-d H:i:s');
         <div class="container-fluid">
             <div class="row">
                 <div class="col-sm-6">
-                    <h1 class="font-weight-bold">Periksa Revisi Proposal Skripsi</h1>
+                    <h1 class="font-weight-bold">Periksa Revisi Skripsi</h1>
                 </div>
             </div>
         </div>
@@ -64,7 +64,7 @@ $now = date('Y-m-d H:i:s');
                         <div class="card-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">
-                                    Periksa Revisi Proposal Skripsi
+                                    Periksa Revisi Skripsi
                                 </h3>
                                 <div class="card-tools">
                                     <a href="{{ route('revisi-proposal-skripsi.periksa') }}" id="btn-download"

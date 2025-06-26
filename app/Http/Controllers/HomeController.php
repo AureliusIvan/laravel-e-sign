@@ -111,6 +111,7 @@ class HomeController extends Controller
             ->select(
                 'ps.uuid',
                 'ps.judul_proposal',
+                'ps.judul_proposal_en',
                 'ps.status',
                 'ps.status_approval_penilai1',
                 'ps.status_approval_penilai2', 

@@ -13,7 +13,7 @@
     <div class="container-fluid">
       <div class="row">
         <div class="col-sm-6">
-          <h1 class="font-weight-bold">Periksa Revisi Proposal Skripsi</h1>
+          <h1 class="font-weight-bold">Periksa Revisi Skripsi</h1>
         </div>
       </div>
     </div>
@@ -47,7 +47,7 @@
             <div class="card-header">
               <div class="d-flex justify-content-between align-items-center">
                 <h3 class="card-title">
-                  Periksa Revisi Proposal Skripsi
+                  Periksa Revisi Skripsi
                 </h3>
                 <div class="card-tools">
                   <button type="button" class="btn btn-tool" data-card-widget="collapse" title="Collapse">
@@ -63,7 +63,7 @@
                 <thead>
                   <tr>
                     <th style="width: 5%;">#</th>
-                    <th style="width: 30%;">Judul Revisi Proposal Skripsi Form</th>
+                    <th style="width: 30%;">Judul Revisi Skripsi Form</th>
                     <th>Ditutup</th>
                     <th style="width: 15%;"></th>
                   </tr>

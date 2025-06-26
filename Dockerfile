@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y \
     # Install and enable the imagick extension
     && pecl install imagick \
     && docker-php-ext-enable imagick \
+    # Fix ImageMagick security policy to allow PDF operations
+    && sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<policy domain="coder" rights="read|write" pattern="PDF" \/>/' /etc/ImageMagick-6/policy.xml \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Composer

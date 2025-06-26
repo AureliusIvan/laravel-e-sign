@@ -40,7 +40,7 @@
                     <!-- Card -->
                     <div class="card">
                         <div class="card-header">
-                            <h3 class="card-title">Daftar Proposal Skripsi Yang Sudah Disubmit</h3>
+                            <h3 class="card-title">Daftar Skripsi Yang Sudah Disubmit</h3>
                         </div>
                         <!-- /.card-header -->
                         <div class="card-body">
@@ -75,7 +75,8 @@
                                                 <td>{{ $proposal->program_studi }}</td>
                                                 <td>
                                                     <div class="text-wrap" style="max-width: 300px;">
-                                                        {{ $proposal->judul_proposal }}
+                                                        <strong>ID:</strong> {{ $proposal->judul_proposal }}<br>
+                                                        <strong>EN:</strong> {{ $proposal->judul_proposal_en ?? 'Not provided' }}
                                                     </div>
                                                 </td>
                                                 <td>{{ $proposal->judul_form }}</td>

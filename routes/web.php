@@ -137,7 +137,7 @@ Route::middleware(['auth', 'verified', 'user.type:mahasiswa', 'check.status.maha
     // Route::get('/bimbingan/{uuid}/mahasiswa', [BimbinganController::class, 'mahasiswaEdit'])->name('bimbingan.edit');
     // Route::put('/bimbingan/{uuid}', [BimbinganController::class, 'mahasiswaUpdate'])->name('bimbingan.update');
 
-    // Proposal Skripsi
+    // Skripsi
     Route::get('/proposal-skripsi', [ProposalSkripsiController::class, 'index'])->name('proposal.skripsi.pengumpulan');
     Route::post('/proposal-skripsi/store', [ProposalSkripsiController::class, 'store'])->name('proposal.skripsi.pengumpulan.store');
     Route::get('/proposal-skripsi/{uuid}/file', [ProposalSkripsiController::class, 'getFile'])->name('proposal.skripsi.getfile');
@@ -147,7 +147,7 @@ Route::middleware(['auth', 'verified', 'user.type:mahasiswa', 'check.status.maha
     Route::get('/proposal-skripsi/hasil/{uuid}/download-file-periksa-penilai2', [ProposalSkripsiController::class, 'downloadFilePeriksaPenilai2'])->name('proposal.skripsi.hasil.download-file-periksa-penilai2');
     Route::get('/proposal-skripsi/hasil/{uuid}/download-file-periksa-penilai3', [ProposalSkripsiController::class, 'downloadFilePeriksaPenilai3'])->name('proposal.skripsi.hasil.download-file-periksa-penilai3');
 
-    // Revisi Proposal Skripsi
+    // Revisi Skripsi
     // Route::get('/revisi-proposal-skripsi', [RevisiProposalController::class, 'index'])->name('revisi-proposal-skripsi.pengumpulan');
     // Route::get('/revisi-proposal-skripsi/fetch-proposal/{uuid}', [RevisiProposalController::class, 'fetchProposal'])->name('revisi-proposal-skripsi.pengumpulan.fetch-proposal');
     // Route::get('/revisi-proposal-skripsi/fetch-detail-proposal/{uuid}', [RevisiProposalController::class, 'fetchDetailProposal'])->name('revisi-proposal-skripsi.pengumpulan.fetch-detail-proposal');
@@ -237,7 +237,7 @@ Route::middleware(['auth', 'verified', 'user.type:kaprodi,sekprodi', 'check.stat
     Route::put('/proposal-rti/form/{uuid}', [ProposalRtiFormController::class, 'update'])->name('proposal.rti.form.update');
     Route::delete('/proposal-rti/form/destroy', [ProposalRtiFormController::class, 'destroy'])->name('proposal.rti.form.destroy');
 
-    // Form Proposal Skripsi
+    // Form Skripsi
     Route::get('/proposal-skripsi/form', [ProposalSkripsiFormController::class, 'index'])->name('proposal.skripsi.form');
     Route::get('/proposal-skripsi/form/create', [ProposalSkripsiFormController::class, 'create'])->name('proposal.skripsi.form.create');
     Route::post('/proposal-skripsi/form/store', [ProposalSkripsiFormController::class, 'store'])->name('proposal.skripsi.form.store');
@@ -245,7 +245,7 @@ Route::middleware(['auth', 'verified', 'user.type:kaprodi,sekprodi', 'check.stat
     Route::put('/proposal-skripsi/form/{uuid}', [ProposalSkripsiFormController::class, 'update'])->name('proposal.skripsi.form.update');
     Route::delete('/proposal-skripsi/form/destroy', [ProposalSkripsiFormController::class, 'destroy'])->name('proposal.skripsi.form.destroy');
 
-    // Form Revisi Proposal Skripsi
+    // Form Revisi Skripsi
     // Route::get('/revisi-proposal-skripsi/form', [RevisiProposalFormController::class, 'index'])->name('revisi-proposal.skripsi.form');
     // Route::get('/revisi-proposal-skripsi/form/create', [RevisiProposalFormController::class, 'create'])->name('revisi-proposal.skripsi.form.create');
     // Route::post('/revisi-proposal-skripsi/form/store', [RevisiProposalFormController::class, 'store'])->name('revisi-proposal.skripsi.form.store');

@@ -42,7 +42,7 @@ class RevisiProposalController extends Controller
             $result = [];
         }
         return view('pages.mahasiswa.revisi-proposal.revisi-proposal', [
-            'title' => 'Revisi Proposal Skripsi',
+            'title' => 'Revisi Skripsi',
             'subtitle' => 'Pengumpulan',
             'data' => $data,
             'result' => $result,

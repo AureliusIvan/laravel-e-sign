@@ -19,6 +19,7 @@ class ProposalSkripsi extends Model
         'proposal_skripsi_form_id',
         'mahasiswa_id',
         'judul_proposal',
+        'judul_proposal_en',
         'file_proposal',
         'file_proposal_random',
         'file_proposal_mime',

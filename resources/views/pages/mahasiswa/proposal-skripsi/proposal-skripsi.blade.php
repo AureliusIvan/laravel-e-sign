@@ -41,7 +41,7 @@
             <div class="container-fluid">
                 <div class="row">
                     <div class="col-sm-6">
-                        <h1 class="font-weight-bold">Pengumpulan Proposal Skripsi</h1>
+                        <h1 class="font-weight-bold">Pengumpulan Skripsi</h1>
                     </div>
                 </div>
             </div>
@@ -156,9 +156,15 @@
                                                     <td>{{ date('l, d F Y H:i:s', strtotime($d->ditutup)) }} </td>
                                                 </tr>
                                                 <tr>
-                                                    <th style="width: 25%;">Judul Proposal Skripsi</th>
+                                                    <th style="width: 25%;">Judul Proposal (Indonesia)</th>
                                                     <td>
                                                         {{ $row->judul_proposal }}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th style="width: 25%;">Judul Proposal (English)</th>
+                                                    <td>
+                                                        {{ $row->judul_proposal_en ?? 'Not provided' }}
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -238,7 +244,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h4 class="modal-title">Pengumpulan Proposal Skripsi</h4>
+                    <h4 class="modal-title">Pengumpulan Skripsi</h4>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -250,10 +256,10 @@
                         <input type="hidden" class="id_form" name="id_form">
 
                         <div class="form-group">
-                            <label for="judul_proposal">Judul Proposal <span class="text-danger">*</span></label>
+                            <label for="judul_proposal">Judul Proposal (Bahasa Indonesia) <span class="text-danger">*</span></label>
                             <div class="input-group mb-3">
                             <textarea pattern="[^<>]+" class="form-control" id="judul_proposal" name="judul_proposal"
-                                      placeholder="Judul Proposal" aria-describedby="basic-addon2"
+                                      placeholder="Judul Proposal dalam Bahasa Indonesia" aria-describedby="basic-addon2"
                                       required>{{ old('judul_proposal') }}</textarea>
                                 <div class="input-group-append">
                                     <div class="input-group-text">
@@ -264,8 +270,22 @@
                         </div>
 
                         <div class="form-group">
+                            <label for="judul_proposal_en">Judul Proposal (English) <span class="text-danger">*</span></label>
+                            <div class="input-group mb-3">
+                            <textarea pattern="[^<>]+" class="form-control" id="judul_proposal_en" name="judul_proposal_en"
+                                      placeholder="Thesis Title in English" aria-describedby="basic-addon2"
+                                      required>{{ old('judul_proposal_en') }}</textarea>
+                                <div class="input-group-append">
+                                    <div class="input-group-text">
+                                        <span class="fas fa-pen"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
                             <label for="exampleInputFile">
-                                Silahkan upload file proposal skripsi anda (max 30MB) <span class="text-danger">*</span>
+                                Silahkan upload file Skripsi anda (max 30MB) <span class="text-danger">*</span>
                             </label>
                             <div class="input-group">
                                 <div class="custom-file">
@@ -334,11 +354,22 @@
             $('#formPengumpulan').on('submit', function (e) {
                 $('#overlay').show();
                 let text = $('textarea[name="judul_proposal"]').val().trim();
+                let textEn = $('textarea[name="judul_proposal_en"]').val().trim();
                 let words = text.split(/\s+/);
+                let wordsEn = textEn.split(/\s+/);
+                
                 if (words.length < 4) {
-                    alert('Silahkan masukan judul minimal 4 kata.');
+                    alert('Silahkan masukan judul bahasa Indonesia minimal 4 kata.');
                     e.preventDefault();
                     $('#overlay').hide();
+                    return;
+                }
+                
+                if (wordsEn.length < 4) {
+                    alert('Please enter English title with at least 4 words.');
+                    e.preventDefault();
+                    $('#overlay').hide();
+                    return;
                 }
             });
 

@@ -26,7 +26,7 @@ class RevisiProposalFormController extends Controller
             ->get();
         return view('pages.prodi.form.revisi-proposal-form.revisi-proposal-form', [
             'title' => 'Form',
-            'subtitle' => 'Revisi Proposal Skripsi',
+            'subtitle' => 'Revisi Skripsi',
             'data' => $data,
         ]);
     }
@@ -41,7 +41,7 @@ class RevisiProposalFormController extends Controller
             ->get();
         return view('pages.prodi.form.revisi-proposal-form.add-revisi-proposal-form', [
             'title' => 'Form',
-            'subtitle' => 'Tambah Form Revisi Proposal Skripsi',
+            'subtitle' => 'Tambah Form Revisi Skripsi',
             'tahun' => $active->uuid,
             'prodi' => $prodi->uuid,
             'form' => $proposalForm,
@@ -114,7 +114,7 @@ class RevisiProposalFormController extends Controller
 
             return view('pages.prodi.form.revisi-proposal-form.edit-revisi-proposal-form', [
                 'title' => 'Form',
-                'subtitle' => 'Edit Form Revisi Proposal Skripsi',
+                'subtitle' => 'Edit Form Revisi Skripsi',
                 'data' => $data,
                 'isLinked' => $isLinked,
                 'form' => $proposalForm,

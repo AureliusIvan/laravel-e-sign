@@ -61,7 +61,7 @@ class ProposalSkripsiTemplateExport implements FromCollection, WithHeadings
             'ID Proposal',
             'NIM',
             'Nama',
-            'Proposal Skripsi',
+            'Skripsi',
             'Kode Penelitian',
             'ID Penilai 1',
             'ID Penilai 2',

@@ -340,7 +340,7 @@
 
                         <div class="form-group">
                             <label for="exampleInputFile">
-                                Silahkan upload file proposal skripsi anda (max 30MB) <span class="text-danger">*</span>
+                                Silahkan upload file Skripsi anda (max 30MB) <span class="text-danger">*</span>
                             </label>
                             <div class="input-group">
                                 <div class="custom-file">
@@ -399,7 +399,7 @@
 
                         <div class="form-group">
                             <label for="exampleInputFile">
-                                Silahkan upload file proposal skripsi anda (max 30MB) <span class="text-danger">*</span>
+                                Silahkan upload file Skripsi anda (max 30MB) <span class="text-danger">*</span>
                             </label>
                             <div class="input-group">
                                 <div class="custom-file">
