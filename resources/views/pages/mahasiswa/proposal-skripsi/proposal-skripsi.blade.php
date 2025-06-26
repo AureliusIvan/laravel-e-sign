@@ -256,10 +256,10 @@
                         <input type="hidden" class="id_form" name="id_form">
 
                         <div class="form-group">
-                            <label for="judul_proposal">Judul Proposal (Bahasa Indonesia) <span class="text-danger">*</span></label>
+                            <label for="judul_proposal">Judul Skripsi (Bahasa Indonesia) <span class="text-danger">*</span></label>
                             <div class="input-group mb-3">
                             <textarea pattern="[^<>]+" class="form-control" id="judul_proposal" name="judul_proposal"
-                                      placeholder="Judul Proposal dalam Bahasa Indonesia" aria-describedby="basic-addon2"
+                                      placeholder="Judul Skripsi dalam Bahasa Indonesia" aria-describedby="basic-addon2"
                                       required>{{ old('judul_proposal') }}</textarea>
                                 <div class="input-group-append">
                                     <div class="input-group-text">
@@ -270,7 +270,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="judul_proposal_en">Judul Proposal (English) <span class="text-danger">*</span></label>
+                            <label for="judul_proposal_en">Judul Skripsi (English) <span class="text-danger">*</span></label>
                             <div class="input-group mb-3">
                             <textarea pattern="[^<>]+" class="form-control" id="judul_proposal_en" name="judul_proposal_en"
                                       placeholder="Thesis Title in English" aria-describedby="basic-addon2"

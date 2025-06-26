@@ -52,7 +52,7 @@
                                             <th>NIM</th>
                                             <th>Nama Mahasiswa</th>
                                             <th>Program Studi</th>
-                                            <th>Judul Proposal</th>
+                                            <th>Judul Skripsi</th>
                                             <th>Form</th>
                                             <th>Tahun Ajaran</th>
                                             <th>Tanggal Submit</th>
