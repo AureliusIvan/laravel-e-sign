@@ -369,8 +369,8 @@ class SignatureController extends Controller
         // For admin users, just show the verify interface without student data
         if (Auth::user()->role === 'admin') {
             return view('pages.dosen.verify.verify', [
-                'title' => 'Verify Dokumen',
-                'subtitle' => 'Verify Dokumen',
+                'title' => 'Verify Thesis',
+                'subtitle' => 'Verify Thesis',
                 'data' => collect([]), // Empty collection for admin
                 'status' => 'none',
             ]);
@@ -420,8 +420,8 @@ class SignatureController extends Controller
         $data = $transformPertama->merge($transformKedua);
 
         return view('pages.dosen.verify.verify', [
-            'title' => 'Verify Dokumen',
-            'subtitle' => 'Verify Dokumen',
+            'title' => 'Verify Thesis',
+            'subtitle' => 'Verify Thesis',
             'data' => $data,
             'status' => 'none',
         ]);
@@ -462,8 +462,8 @@ class SignatureController extends Controller
             $proposal = ProposalSkripsi::where('uuid', $parsedArray['UUID'])->first();
             if ($proposal->hash_value !== $hashValue) {
                 return view('pages.dosen.verify.verify', [
-                    'title' => 'Verify Dokumen',
-                    'subtitle' => 'Verify Dokumen',
+                    'title' => 'Verify Thesis',
+                    'subtitle' => 'Verify Thesis',
                     'status' => 'failed',
                     'hash_value' => $hashValue,
                     'error' => 'Hash value mismatch',
@@ -471,8 +471,8 @@ class SignatureController extends Controller
             }
 
             return view('pages.dosen.verify.verify', [
-                'title' => 'Verify Dokumen',
-                'subtitle' => 'Verify Dokumen',
+                'title' => 'Verify Thesis',
+                'subtitle' => 'Verify Thesis',
                 'Tipe_Laporan' => $parsedArray['Tipe_Laporan'],
                 'Judul_Laporan' => $parsedArray['Judul_Laporan'],
                 'Judul_Laporan_EN' => $parsedArray['Judul_Laporan_EN'] ?? '',
@@ -493,8 +493,8 @@ class SignatureController extends Controller
         } catch (\Exception $e) {
             // Handle the exception
             return view('pages.dosen.verify.verify', [
-                'title' => 'Verify Dokumen',
-                'subtitle' => 'Verify Dokumen',
+                'title' => 'Verify Thesis',
+                'subtitle' => 'Verify Thesis',
                 'status' => 'error',
                 'error' => $e->getMessage(),
             ]);

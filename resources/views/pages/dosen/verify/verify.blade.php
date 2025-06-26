@@ -15,7 +15,7 @@
                 <div class="row">
                     <div class="col-sm-6">
                         <h1 class="font-weight-bold">
-                            Verify Dokumen
+                            Verify Thesis
                             </h1>
                     </div>
                 </div>
@@ -77,7 +77,7 @@
                                 <!-- Submit Button -->
                                 <div class="d-flex flex-row">
                                     <div class="mr-2">
-                                        <input type="submit" class="btn btn-primary" name="action" value="Verify Documents"/>
+                                        <input type="submit" class="btn btn-primary" name="action" value="Verify Thesis"/>
                                     </div>
                                 </div>
 

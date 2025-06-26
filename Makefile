@@ -28,8 +28,9 @@ prod:
 	@docker exec laravel_app php artisan storage:link
 
 seed:
+	@docker exec laravel_app php artisan migrate:fresh
 	@docker exec laravel_app php artisan migrate --force
-	@docker exec laravel_app php artisan db:seed --class=AllSeeder --force
+	@docker exec laravel_app php artisan db:seed --class=DatabaseSeeder --force
 
 prod-down:
 	@docker compose -f prod.docker-compose.yml down
