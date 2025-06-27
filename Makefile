@@ -35,6 +35,16 @@ seed:
 prod-down:
 	@docker compose -f prod.docker-compose.yml down
 
+fix-imagemagick:
+	@echo "Fixing ImageMagick policy for PDF processing..."
+	@docker exec laravel_app bash -c "sed -i 's/<policy domain=\"coder\" rights=\"none\" pattern=\"PDF\" \/>/<policy domain=\"coder\" rights=\"read|write\" pattern=\"PDF\" \/>/g' /etc/ImageMagick-*/policy.xml || true"
+	@docker exec laravel_app bash -c "sed -i '/pattern=\"PDF\"/d' /etc/ImageMagick-*/policy.xml || true"
+	@echo "ImageMagick policy updated. Please test PDF signing functionality."
+
+test-pdf:
+	@echo "Testing PDF processing capabilities..."
+	@docker exec laravel_app bash -c "identify -version | head -5"
+	@docker exec laravel_app bash -c "if [ -f storage/sample.pdf ]; then echo 'Testing PDF conversion...'; convert storage/sample.pdf[0] /tmp/test.jpg && echo 'PDF conversion: SUCCESS' || echo 'PDF conversion: FAILED'; else echo 'No sample PDF found at storage/sample.pdf'; fi"
 
 tunnel:
 	@cloudflared tunnel --config tunnel-config.yml run &

@@ -122,33 +122,52 @@ class PeriksaProposalController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        // Base validation rules
+        $rules = [
             'penilai' => ['required', 'numeric'],
             'proposal_id' => ['required'],
             'status' => ['required'],
             'action' => ['required'],
-            'file' => ['required', 'file', 'mimes:pdf', 'max:30720']
-        ]);
+            'file' => ['nullable', 'file', 'mimes:pdf', 'max:30720']
+        ];
+
+        // If status is rejection (0), make comment mandatory
+        if ($request->status == '0') {
+            $rules['rejection_comment'] = ['required', 'string', 'min:10'];
+        }
+
+        $request->validate($rules);
 
         try {
             DB::transaction(function () use ($request) {
                 DB::table('proposal_skripsi')->lockForUpdate()->get();
                 $penilai = $request->penilai;
-                $file = $request->file('file');
-                $fileName = $file->getClientOriginalName();
-                $mimeType = $file->getClientMimeType();
-                $fileNameRandom = date('YmdHis') . '_' . $file->hashName();
                 $now = date('Y-m-d');
 
                 $proposal = ProposalSkripsi::where('id', $request->proposal_id)->firstOrFail();
 
+                // Base approval fields
                 $penilaiFields = [
-                    'file_penilai' . $penilai => $fileName,
-                    'file_random_penilai' . $penilai => $fileNameRandom,
-                    'file_penilai' . $penilai . '_mime' => $mimeType,
                     'status_approval_penilai' . $penilai => $request->status,
                     'tanggal_approval_penilai' . $penilai => $now,
                 ];
+
+                // Add rejection comment if status is rejection (0)
+                if ($request->status == '0' && $request->has('rejection_comment')) {
+                    $penilaiFields['rejection_comment_penilai' . $penilai] = $request->rejection_comment;
+                }
+
+                // Handle file upload if provided (optional)
+                if ($request->hasFile('file')) {
+                    $file = $request->file('file');
+                    $fileName = $file->getClientOriginalName();
+                    $mimeType = $file->getClientMimeType();
+                    $fileNameRandom = date('YmdHis') . '_' . $file->hashName();
+                    
+                    $penilaiFields['file_penilai' . $penilai] = $fileName;
+                    $penilaiFields['file_random_penilai' . $penilai] = $fileNameRandom;
+                    $penilaiFields['file_penilai' . $penilai . '_mime'] = $mimeType;
+                }
 
                 // Check if the penilai is valid
                 if (in_array($penilai, [1, 2, 3])) {
@@ -159,40 +178,59 @@ class PeriksaProposalController extends Controller
 
                     $proposal->save();
 
-                    // Store the file
-                    // TODO: embed signature
-                    $file->storeAs('uploads/periksa-proposal', $fileNameRandom);
+                    // Store the file if uploaded
+                    if ($request->hasFile('file')) {
+                        $file->storeAs('uploads/periksa-proposal', $fileNameRandom);
+                    }
                 } else {
-                    throw new Exception('Gagal mengupload file');
+                    throw new Exception('Gagal menyimpan data');
                 }
 
 
+                // Refresh proposal data and update status_akhir
                 $proposal = ProposalSkripsi::with('proposalSkripsiForm')->where('id', $request->proposal_id)->firstOrFail();
-                if ($proposal->status_approval_penilai1 !== null && $proposal->status_approval_penilai2 !== null && $proposal->status_approval_penilai3 !== null) {
-                    $active = TahunAjaran::where('status_aktif', 1)->firstOrFail();
-                    $pengaturan = Pengaturan::with('pengaturanDetail')
-                        ->where('tahun_ajaran_id', $active->id)
-                        ->where('program_studi_id', $proposal->proposalSkripsiForm->program_studi_id)
-                        ->firstOrFail();
-                    $jumlahSetuju = $pengaturan->pengaturanDetail->jumlah_setuju_proposal;
-                    $count = 0;
-                    if ($proposal->status_approval_penilai1 === 1) {
-                        $count++;
-                    }
-                    if ($proposal->status_approval_penilai2 === 1) {
-                        $count++;
-                    }
-                    if ($proposal->status_approval_penilai3 === 1) {
-                        $count++;
-                    }
+                
+                // If current evaluation is a rejection, immediately set status to rejected
+                if ($request->status == '0') {
+                    $proposal->status_akhir = 0;
+                    $proposal->save();
+                } else {
+                    // Check if any existing evaluation is a rejection
+                    $hasRejection = ($proposal->status_approval_penilai1 === 0) || 
+                                   ($proposal->status_approval_penilai2 === 0) || 
+                                   ($proposal->status_approval_penilai3 === 0);
+                    
+                    if ($hasRejection) {
+                        $proposal->status_akhir = 0;
+                        $proposal->save();
+                    } elseif ($proposal->status_approval_penilai1 !== null && $proposal->status_approval_penilai2 !== null && $proposal->status_approval_penilai3 !== null) {
+                        // All evaluators have completed their reviews and none rejected
+                        $active = TahunAjaran::where('status_aktif', 1)->firstOrFail();
+                        $pengaturan = Pengaturan::with('pengaturanDetail')
+                            ->where('tahun_ajaran_id', $active->id)
+                            ->where('program_studi_id', $proposal->proposalSkripsiForm->program_studi_id)
+                            ->firstOrFail();
+                        $jumlahSetuju = $pengaturan->pengaturanDetail->jumlah_setuju_proposal;
+                        $count = 0;
+                        if ($proposal->status_approval_penilai1 === 1) {
+                            $count++;
+                        }
+                        if ($proposal->status_approval_penilai2 === 1) {
+                            $count++;
+                        }
+                        if ($proposal->status_approval_penilai3 === 1) {
+                            $count++;
+                        }
 
-                    if ($count == (int)$jumlahSetuju) {
-                        $proposal->status_akhir = 1;
-                        $proposal->save();
-                    } else {
-                        $proposal->status_akhir = false;
-                        $proposal->save();
+                        if ($count >= (int)$jumlahSetuju) {
+                            $proposal->status_akhir = 1;
+                            $proposal->save();
+                        } else {
+                            $proposal->status_akhir = 0;
+                            $proposal->save();
+                        }
                     }
+                    // If not all evaluations are complete and no rejections, leave status_akhir as null (in progress)
                 }
             });
 
@@ -256,7 +294,10 @@ class PeriksaProposalController extends Controller
                         $proposal->file_penilai1_mime = null;
                         $proposal->status_approval_penilai1 = null;
                         $proposal->tanggal_approval_penilai1 = null;
-                        $proposal->status_akhir = null;
+                        $proposal->rejection_comment_penilai1 = null;
+                        
+                        // Recalculate status_akhir after deletion
+                        $this->recalculateProposalStatus($proposal);
                         $proposal->save();
                     } else {
                         throw new Exception('File not found');
@@ -270,7 +311,10 @@ class PeriksaProposalController extends Controller
                         $proposal->file_penilai2_mime = null;
                         $proposal->status_approval_penilai2 = null;
                         $proposal->tanggal_approval_penilai2 = null;
-                        $proposal->status_akhir = null;
+                        $proposal->rejection_comment_penilai2 = null;
+                        
+                        // Recalculate status_akhir after deletion
+                        $this->recalculateProposalStatus($proposal);
                         $proposal->save();
                     } else {
                         throw new Exception('File not found');
@@ -284,7 +328,10 @@ class PeriksaProposalController extends Controller
                         $proposal->file_penilai3_mime = null;
                         $proposal->status_approval_penilai3 = null;
                         $proposal->tanggal_approval_penilai3 = null;
-                        $proposal->status_akhir = null;
+                        $proposal->rejection_comment_penilai3 = null;
+                        
+                        // Recalculate status_akhir after deletion
+                        $this->recalculateProposalStatus($proposal);
                         $proposal->save();
                     } else {
                         throw new Exception('File not found');
@@ -297,6 +344,53 @@ class PeriksaProposalController extends Controller
             return redirect()->back()->with('success', 'Data berhasil dihapus.');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal');
+        }
+    }
+
+    /**
+     * Recalculate proposal status based on current evaluations
+     */
+    private function recalculateProposalStatus($proposal)
+    {
+        // Check if any evaluation is a rejection
+        $hasRejection = ($proposal->status_approval_penilai1 === 0) || 
+                       ($proposal->status_approval_penilai2 === 0) || 
+                       ($proposal->status_approval_penilai3 === 0);
+        
+        if ($hasRejection) {
+            $proposal->status_akhir = 0;
+        } elseif ($proposal->status_approval_penilai1 !== null && $proposal->status_approval_penilai2 !== null && $proposal->status_approval_penilai3 !== null) {
+            // All evaluators have completed their reviews and none rejected
+            $active = TahunAjaran::where('status_aktif', 1)->first();
+            if ($active) {
+                $pengaturan = Pengaturan::with('pengaturanDetail')
+                    ->where('tahun_ajaran_id', $active->id)
+                    ->where('program_studi_id', $proposal->proposalSkripsiForm->program_studi_id)
+                    ->first();
+                
+                if ($pengaturan && $pengaturan->pengaturanDetail) {
+                    $jumlahSetuju = $pengaturan->pengaturanDetail->jumlah_setuju_proposal;
+                    $count = 0;
+                    if ($proposal->status_approval_penilai1 === 1) {
+                        $count++;
+                    }
+                    if ($proposal->status_approval_penilai2 === 1) {
+                        $count++;
+                    }
+                    if ($proposal->status_approval_penilai3 === 1) {
+                        $count++;
+                    }
+
+                    if ($count >= (int)$jumlahSetuju) {
+                        $proposal->status_akhir = 1;
+                    } else {
+                        $proposal->status_akhir = 0;
+                    }
+                }
+            }
+        } else {
+            // Not all evaluations are complete and no rejections, leave as in progress
+            $proposal->status_akhir = null;
         }
     }
 }

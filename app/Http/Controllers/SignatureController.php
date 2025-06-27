@@ -84,13 +84,13 @@ class SignatureController extends Controller
                 'id' => 'required|integer|exists:proposal_skripsi,id',
                 'x' => 'required|numeric',
                 'y' => 'required|numeric',
-                'width' => 'required|numeric',
-                'height' => 'required|numeric',
-                'page_number' => 'required|integer',
+                'width' => 'required|numeric|min:1',
+                'height' => 'required|numeric|min:1',
+                'page_number' => 'required|integer|min:1',
             ]);
         } catch (\Exception $e) {
             Log::error("Failed to validate incoming request data: " . $e->getMessage());
-            return response()->json(['error' => 'Invalid request data.'], 400);
+            return redirect()->back()->with('error', 'Data permintaan tidak valid: ' . $e->getMessage());
         }
 
         try {
@@ -119,170 +119,191 @@ class SignatureController extends Controller
                 Log::warning("No kaprodi found in the database, proceeding without kaprodi information");
             }
 
-            // Step 3: Get the PDF file path
-            $fileName = $proposal->file_proposal_random; // e.g., "20241012125326_YDMVXNrBInh4oAoMhE471fFsrYmmmBCZ54HOzkMK.pdf"
-            $originalPdfPath = storage_path('app/uploads/proposal/' . $fileName); // Adjust the path as needed
+            // Step 3: Get the PDF file path and validate
+            $fileName = $proposal->file_proposal_random; 
+            if (!$fileName) {
+                Log::error("No proposal file found for proposal ID: {$validatedData['id']}");
+                return redirect()->back()->with('error', 'File proposal tidak ditemukan.');
+            }
+
+            $originalPdfPath = storage_path('app/uploads/proposal/' . $fileName);
 
             // Check if the file exists
             if (!file_exists($originalPdfPath)) {
                 Log::error("Proposal PDF not found at path: {$originalPdfPath}");
-                return response()->json(['error' => 'Proposal PDF not found.'], 404);
+                return redirect()->back()->with('error', 'File proposal tidak ditemukan di server.');
+            }
+
+            // Validate file size (max 50MB)
+            if (filesize($originalPdfPath) > 50 * 1024 * 1024) {
+                Log::error("PDF file too large: " . filesize($originalPdfPath) . " bytes");
+                return redirect()->back()->with('error', 'File PDF terlalu besar (maksimal 50MB).');
+            }
+
+            // Validate PDF file integrity
+            $fileContent = file_get_contents($originalPdfPath);
+            if (!$fileContent || substr($fileContent, 0, 4) !== '%PDF') {
+                Log::error("Invalid PDF file format: {$originalPdfPath}");
+                return redirect()->back()->with('error', 'File bukan format PDF yang valid.');
             }
 
             // Check PDF compatibility before processing
             if (!$this->isPdfCompatibleWithFpdi($originalPdfPath)) {
                 Log::warning("PDF may not be compatible with FPDI free version: {$originalPdfPath}");
-                // Continue anyway, but we'll handle the error in the processing step
+                // Skip FPDI and go directly to image-based approach
+                return $this->handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, true);
             }
 
-            // Step 4: Ensure the temp directory exists before QR code generation
-            $tempDir = storage_path('app/temp/');
-            if (!file_exists($tempDir)) {
-                if (!mkdir($tempDir, 0755, true)) {
-                    Log::error("Failed to create temp directory at: {$tempDir}");
-                    return response()->json(['error' => 'Server error. Please try again later.'], 500);
-                }
-            }
+            return $this->handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, false);
 
-            // Generate the QR Code with Dummy Data using chillerlan/php-qrcode
-            // Define the dummy data you want to encode in the QR code
-            Log::info("Looking for Dosen with user_id: " . Auth::user()->id);
-            $lecturer = Dosen::where('user_id', Auth::user()->id)->first();
-            if (!$lecturer) {
-                Log::error("No Dosen record found for user ID: " . Auth::user()->id);
-                Log::info("Available Dosen records: " . Dosen::all()->pluck('user_id')->toJson());
-                return response()->json(['error' => 'Lecturer profile not found.'], 404);
-            }
-            Log::info("Found lecturer: " . $lecturer->nama);
-            $qrData = "Signed by $lecturer->nama ($lecturer->nid) \nDate: " . now()->toDateTimeString();
-
-            // Define QR code options
-            $options = new QROptions([
-                'version'      => 5,
-                'outputType'   => QRCode::OUTPUT_IMAGE_PNG, // PNG output
-                'eccLevel'     => QRCode::ECC_L,
-                'scale'        => 5,
-                'margin'       => 1,
-                'imageBase64'  => false, // Ensure we're working with binary PNG, not base64
-                'pngTransparency' => true, // Enable transparency for PNG
-                'bgColor'      => [0, 0, 0, 127], // Fully transparent background (RGBA)
+        } catch (\Exception $e) {
+            Log::error("Unexpected error in signThesis: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $validatedData ?? null
             ]);
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat memproses dokumen: ' . $e->getMessage());
+        }
+    }
 
-            $qrcode = new QRCode($options);
+    /**
+     * Handle the actual PDF signing process with proper fallback mechanisms
+     */
+    private function handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, $forceImageApproach = false)
+    {
+        $originalPdfPath = storage_path('app/uploads/proposal/' . $fileName);
 
-            // Initialize QRCode object with options
-            $qrCodePath = storage_path('app/temp/qr_code.png');  // Define the path
-            $qrcode->render($qrData, $qrCodePath);  // Save as PNG
+        // Step 4: Ensure the temp directory exists before QR code generation
+        $tempDir = storage_path('app/temp/');
+        if (!file_exists($tempDir)) {
+            if (!mkdir($tempDir, 0755, true)) {
+                Log::error("Failed to create temp directory at: {$tempDir}");
+                return redirect()->back()->with('error', 'Gagal membuat direktori sementara.');
+            }
+        }
+
+        // Generate the QR Code
+        Log::info("Looking for Dosen with user_id: " . Auth::user()->id);
+        $lecturer = Dosen::where('user_id', Auth::user()->id)->first();
+        if (!$lecturer) {
+            Log::error("No Dosen record found for user ID: " . Auth::user()->id);
+            return redirect()->back()->with('error', 'Profil dosen tidak ditemukan.');
+        }
+        
+        Log::info("Found lecturer: " . $lecturer->nama);
+        $qrData = "Signed by $lecturer->nama ($lecturer->nid) \nDate: " . now()->toDateTimeString();
+
+        // Define QR code options
+        $options = new QROptions([
+            'outputType' => QRCode::OUTPUT_IMAGE_PNG,
+            'eccLevel' => QRCode::ECC_L,
+            'scale' => 6,
+            'imageBase64' => false,
+        ]);
+
+        // Generate QR code
+        $qrcode = new QRCode($options);
+        $qrCodePath = $tempDir . 'qr_code_' . time() . '.png';
+        
+        try {
+            $qrcode->render($qrData, $qrCodePath);
             Log::info("QR code saved at: {$qrCodePath}");
         } catch (\Exception $e) {
             Log::error("Failed to generate QR code: " . $e->getMessage());
-            return response()->json(['error' => 'Failed to generate QR code. (1)'], 500);
+            return redirect()->back()->with('error', 'Gagal membuat kode QR.');
         }
 
         if (!file_exists($qrCodePath)) {
             Log::error("QR code PNG not saved at: {$qrCodePath}");
-            return response()->json(['error' => 'Failed to generate QR code. (2)'], 500);
+            return redirect()->back()->with('error', 'Gagal menyimpan kode QR.');
         }
 
-
-
-        // Step 5: Manipulate the PDF to embed the QR Code
-        try {
-            // Initialize FPDI
-            $pdf = new Fpdi();
-
-            // Set the source file - handle compression issues
+        // Try FPDI approach first unless forced to use image approach
+        if (!$forceImageApproach) {
             try {
-                $pageCount = $pdf->setSourceFile($originalPdfPath);
-                Log::info("Original PDF has {$pageCount} pages.");
-            } catch (\Exception $fpdiError) {
-                Log::error("FPDI error processing PDF: " . $fpdiError->getMessage());
-
-                // Check if it's a compression issue
-                if (strpos($fpdiError->getMessage(), 'compression') !== false ||
-                    strpos($fpdiError->getMessage(), 'parser') !== false) {
-
-                    // Clean up the temporary QR code image before returning
-                    if (file_exists($qrCodePath)) {
-                        unlink($qrCodePath);
-                        Log::info("Temporary QR code image deleted: {$qrCodePath}");
-                    }
-
-                    // Attempt to sign using the image-based approach as a fallback
-                    Log::info("FPDI failed, attempting image-based signing approach.");
-                    return $this->signThesisWithImageApproach($validatedData, $proposal, $qrCodePath, $fileName, $kaprodi);
-                }
-
-                // Re-throw if it's not a compression issue
-                throw $fpdiError;
+                return $this->signWithFpdi($validatedData, $proposal, $originalPdfPath, $qrCodePath, $fileName, $kaprodi);
+            } catch (\Exception $e) {
+                Log::warning("FPDI approach failed, falling back to image approach: " . $e->getMessage());
+                // Fall through to image approach
             }
-
-            // Iterate through each page and add QR code on the first page for testing
-            for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
-                // cast page_number to integer
-                $pageNumber = (int)$validatedData['page_number'];
-                // Import a page
-                $templateId = $pdf->importPage($pageNo);
-                $size = $pdf->getTemplateSize($templateId);
-
-                // Add a page with the same orientation and size
-                $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-
-                // Use the imported page as the template
-                $pdf->useTemplate($templateId);
-
-                if($pageNumber == $pageNo){
-                    // Define the position where you want to place the QR code
-                    // Convert to float to ensure correct
-                    // convert px to mm (1px = 0.2645833333 mm)
-                    $x = floatval($validatedData['x']) / floatval($validatedData['width']) * $size['width'] - 3;
-                    $y = floatval($validatedData['y']) / floatval($validatedData['height']) * $size['height'] - 1;
-
-                    // Log the QR code embedding details
-                    Log::info("Embedding QR code on page {$pageNo} at ({$x}mm, {$y}mm)");
-
-                    // Add the QR code image
-                    $qrWidth = 20; // mm
-                    $qrHeight = 20; // mm
-                    $pdf->Image($qrCodePath, $x, $y, $qrWidth, $qrHeight);
-                }
-            }
-        } catch (\Exception $e) {
-            Log::error("Failed to manipulate PDF: " . $e->getMessage());
-            // Clean up the temporary QR code image before returning
-            if (file_exists($qrCodePath)) {
-                unlink($qrCodePath);
-                Log::info("Temporary QR code image deleted: {$qrCodePath}");
-            }
-            return response()->json(['error' => 'Failed to process PDF.', $e->getMessage()], 500);
         }
 
+        // Use image-based approach as fallback
+        Log::info("Using image-based signing approach for: {$fileName}");
+        return $this->signThesisWithImageApproach($validatedData, $proposal, $qrCodePath, $fileName, $kaprodi);
+    }
 
+    /**
+     * Sign PDF using FPDI approach
+     */
+    private function signWithFpdi($validatedData, $proposal, $originalPdfPath, $qrCodePath, $fileName, $kaprodi)
+    {
+        // Initialize FPDI
+        $pdf = new Fpdi();
 
-        try {
-            $pdf->Output($originalPdfPath, 'F');
-            Log::info("Signed PDF saved at: {$originalPdfPath}");
-        } catch (\Exception $e) {
-            Log::error("Failed to save signed PDF: " . $e->getMessage());
-            // Clean up the temporary QR code image before returning
-            if (file_exists($qrCodePath)) {
-                unlink($qrCodePath);
-                Log::info("Temporary QR code image deleted: {$qrCodePath}");
-            }
-            return response()->json(['error' => 'Failed to save signed PDF.'], 500);
+        // Set the source file - handle compression issues
+        $pageCount = $pdf->setSourceFile($originalPdfPath);
+        Log::info("Original PDF has {$pageCount} pages.");
+
+        // Validate page number
+        $pageNumber = (int)$validatedData['page_number'];
+        if ($pageNumber > $pageCount || $pageNumber < 1) {
+            throw new \Exception("Nomor halaman tidak valid. PDF hanya memiliki {$pageCount} halaman.");
         }
 
-        // Step 7: Clean up the temporary QR code image
+        // Iterate through each page and add QR code on the specified page
+        for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
+            // Import a page
+            $templateId = $pdf->importPage($pageNo);
+            $size = $pdf->getTemplateSize($templateId);
+
+            // Add a page with the same orientation and size
+            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+
+            // Use the imported page as the template
+            $pdf->useTemplate($templateId);
+
+            if($pageNumber == $pageNo){
+                // Define the position where you want to place the QR code
+                $x = floatval($validatedData['x']) / floatval($validatedData['width']) * $size['width'] - 3;
+                $y = floatval($validatedData['y']) / floatval($validatedData['height']) * $size['height'] - 1;
+
+                // Validate coordinates
+                if ($x < 0 || $y < 0 || $x > $size['width'] || $y > $size['height']) {
+                    Log::warning("QR code coordinates out of bounds, adjusting position");
+                    $x = max(0, min($x, $size['width'] - 20));
+                    $y = max(0, min($y, $size['height'] - 20));
+                }
+
+                // Log the QR code embedding details
+                Log::info("Embedding QR code on page {$pageNo} at ({$x}mm, {$y}mm)");
+
+                // Add the QR code image
+                $qrWidth = 20; // mm
+                $qrHeight = 20; // mm
+                $pdf->Image($qrCodePath, $x, $y, $qrWidth, $qrHeight);
+            }
+        }
+
+        // Save the PDF
+        $pdf->Output($originalPdfPath, 'F');
+        Log::info("Signed PDF saved at: {$originalPdfPath}");
+
+        // Clean up QR code
         if (file_exists($qrCodePath)) {
-            if (unlink($qrCodePath)) {
-                Log::info("Temporary QR code image deleted: {$qrCodePath}");
-            } else {
-                Log::warning("Failed to delete temporary QR code image: {$qrCodePath}");
-            }
+            unlink($qrCodePath);
         }
 
-        // Step 8: Embed the signed PDF with data.xml
-//        dd($kaprodi->toArray());
+        // Embed XML data and update database
+        $this->embedXmlDataAndFinalize($proposal, $kaprodi, $originalPdfPath, $fileName);
+
+        return redirect()->back()->with('success', 'Proposal berhasil ditandatangani.');
+    }
+
+    /**
+     * Finalize the signing process by embedding XML and updating database
+     */
+    private function embedXmlDataAndFinalize($proposal, $kaprodi, $originalPdfPath, $fileName)
+    {
         try{
             $data = [
                 'UUID' => $proposal->uuid,
@@ -295,10 +316,6 @@ class SignatureController extends Controller
                 'NIM' => $proposal->mahasiswa->nim,
                 'Dosen_Pembimbing_1__Nama' => $proposal->toArray()['penilai_pertama']['nama'],
                 'Dosen_Pembimbing_1__NIDN' => $proposal->toArray()['penilai_pertama']['nid'],
-//                'Dosen_Pembimbing_2__Nama_' => $proposal->pembimbing2->nama,
-//                'Dosen_Pembimbing_2__NIK___NIDN_' => $proposal->pembimbing2->nid,
-//                'Dosen_Penguji' => $proposal->penilaiPertama->nama . ', ' . $proposal->penilaiKedua->nama . ', ' . $proposal->penilaiKetiga->nama,
-//                'Dosen_Ketua_Sidang' => $proposal->penilaiPertama->nama,
                 'KAPRODI' => $kaprodi ? $kaprodi->nama : 'N/A',
             ];
 
@@ -314,38 +331,21 @@ class SignatureController extends Controller
 
             // Clean up the temporary XML file
             if (file_exists($xmlPath)) {
-                if (unlink($xmlPath)) {
-                    Log::info("Temporary XML file deleted: {$xmlPath}");
-                } else {
-                    Log::warning("Failed to delete temporary XML file: {$xmlPath}");
-                }
+                unlink($xmlPath);
             }
         } catch (\Exception $e) {
             Log::error("Failed to embed data.xml: " . $e->getMessage());
-            return response()->json(
-                [
-                    'error' => 'Failed to embed data.xml.',
-                    'message' => $e->getMessage()
-                ]
-                , 500);
+            // Don't fail the entire process for XML embedding issues
         }
 
-        // Step 8: Return the modified PDF as a download
-        if (file_exists($originalPdfPath)) {
-            // save
-            $proposal->signed_proposal = $fileName;
-            // hash value
-            $hashValue = hash('sha512', file_get_contents($originalPdfPath));
-            $hashValue = substr($hashValue, 0, 64);
-            $proposal->hash_value = $hashValue;
-            $proposal->save();
+        // Update database
+        $proposal->signed_proposal = $fileName;
+        $hashValue = hash('sha512', file_get_contents($originalPdfPath));
+        $hashValue = substr($hashValue, 0, 64);
+        $proposal->hash_value = $hashValue;
+        $proposal->save();
 
-//            return response()->download($modifiedPdfPath)->deleteFileAfterSend(false);
-            return redirect()->back()->with('success', 'Proposal berhasil ditandatangani.');
-        } else {
-            Log::error("Modified PDF not found at: {$originalPdfPath}");
-            return response()->json(['error' => 'Signed PDF not found.'], 500);
-        }
+        Log::info("Signing process completed successfully for: {$fileName}");
     }
 
     public function downloadSignedProposal($filename)
