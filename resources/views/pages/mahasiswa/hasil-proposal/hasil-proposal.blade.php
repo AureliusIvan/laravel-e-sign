@@ -85,28 +85,105 @@ $now = date('Y-m-d H:i:s');
                                         <td>
                                             @if ($row->signed_proposal)
                                                 <span class="badge badge-success p-2">
-                                                    <i class="fas fa-check-circle mr-1"></i>Diterima
+                                                    <i class="fas fa-check-circle mr-1"></i>Lulus (3/3 Approval)
                                                 </span>
-                                            @elseif ($row->status_akhir === 0)
+                                            @elseif ($row->status_approval_penilai1 === 0 || $row->status_approval_penilai2 === 0 || $row->status_approval_penilai3 === 0)
                                                 <span class="badge badge-danger p-2">
-                                                    <i class="fas fa-times-circle mr-1"></i>Ditolak
+                                                    <i class="fas fa-redo mr-1"></i>Perlu Evaluasi Ulang
                                                 </span>
-                                                @if ($row->rejection_comment_penilai1 || $row->rejection_comment_penilai2 || $row->rejection_comment_penilai3)
-                                                <br><small class="text-muted mt-1">Lihat komentar penolakan pada tabel di bawah</small>
-                                                @endif
+                                                <br><small class="text-muted mt-1">
+                                                    Ada penilai yang menolak. Semua evaluasi direset - proses dimulai dari awal.
+                                                    @if ($row->rejection_comment_penilai1 || $row->rejection_comment_penilai2 || $row->rejection_comment_penilai3)
+                                                    Lihat komentar penolakan di bawah.
+                                                    @endif
+                                                </small>
                                             @elseif ($row->status_akhir === 1)
-                                                <span class="badge badge-warning p-2">
-                                                    <i class="fas fa-clock mr-1"></i>Menunggu Persetujuan Head of Department
+                                                <span class="badge badge-success p-2">
+                                                    <i class="fas fa-check-circle mr-1"></i>Lulus (3/3 Approval)
                                                 </span>
+                                            @elseif (!$row->penilai1 || !$row->penilai2 || !$row->penilai3)
+                                                <span class="badge badge-info p-2">
+                                                    <i class="fas fa-user-plus mr-1"></i>Menunggu Penugasan Penilai
+                                                </span>
+                                                <br><small class="text-muted mt-1">
+                                                    Diperlukan 3 penilai berbeda: 
+                                                    {{ $row->penilai1 ? '✓' : '○' }} Penilai 1, 
+                                                    {{ $row->penilai2 ? '✓' : '○' }} Penilai 2, 
+                                                    {{ $row->penilai3 ? '✓' : '○' }} Penilai 3
+                                                </small>
                                             @else
-                                                <span class="badge badge-secondary p-2">
-                                                    <i class="fas fa-hourglass-half mr-1"></i>Dalam Proses Evaluasi
+                                                <span class="badge badge-warning p-2">
+                                                    <i class="fas fa-hourglass-half mr-1"></i>Dalam Evaluasi
                                                 </span>
+                                                <br><small class="text-muted mt-1">
+                                                    Status: 
+                                                    {{ $row->status_approval_penilai1 === 1 ? '✓' : ($row->status_approval_penilai1 === 0 ? '✗' : '○') }} Penilai 1,
+                                                    {{ $row->status_approval_penilai2 === 1 ? '✓' : ($row->status_approval_penilai2 === 0 ? '✗' : '○') }} Penilai 2,
+                                                    {{ $row->status_approval_penilai3 === 1 ? '✓' : ($row->status_approval_penilai3 === 0 ? '✗' : '○') }} Penilai 3
+                                                </small>
                                             @endif
                                         </td>
                                     </tr>
                                 </table>
-                                @if ($row->status_akhir !== null)
+                                <!-- Always show the 3-evaluator status table -->
+                                <div class="alert alert-light border">
+                                    <h6><i class="fas fa-info-circle mr-1"></i>Status 3 Persetujuan Penilai:</h6>
+                                    <p class="mb-1 text-muted">Proposal Anda memerlukan persetujuan dari ketiga penilai untuk dinyatakan lulus.</p>
+                                    <div class="alert alert-warning mt-2 p-2">
+                                        <small><strong><i class="fas fa-exclamation-triangle mr-1"></i>Perhatian:</strong> 
+                                        Jika ada satu penilai yang menolak, semua persetujuan akan direset dan proses evaluasi dimulai dari awal.</small>
+                                    </div>
+                                    
+                                    @php
+                                        $assignedCount = 0;
+                                        $approvedCount = 0;
+                                        $hasRejection = false;
+                                        $rejectedCount = 0;
+                                        
+                                        if ($row->penilai1) $assignedCount++;
+                                        if ($row->penilai2) $assignedCount++;
+                                        if ($row->penilai3) $assignedCount++;
+                                        
+                                        // Check for rejections first
+                                        if ($row->status_approval_penilai1 === 0) { $hasRejection = true; $rejectedCount++; }
+                                        if ($row->status_approval_penilai2 === 0) { $hasRejection = true; $rejectedCount++; }
+                                        if ($row->status_approval_penilai3 === 0) { $hasRejection = true; $rejectedCount++; }
+                                        
+                                        // Count approvals only if no rejections (due to reset mechanism)
+                                        if (!$hasRejection) {
+                                            if ($row->status_approval_penilai1 === 1) $approvedCount++;
+                                            if ($row->status_approval_penilai2 === 1) $approvedCount++;
+                                            if ($row->status_approval_penilai3 === 1) $approvedCount++;
+                                        }
+                                    @endphp
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <small class="text-muted">Penilai Ditugaskan:</small>
+                                            <div class="progress mb-2" style="height: 20px;">
+                                                <div class="progress-bar bg-info" role="progressbar" 
+                                                     style="width: {{ ($assignedCount/3)*100 }}%">
+                                                    {{ $assignedCount }}/3
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <small class="text-muted">Persetujuan Diterima:</small>
+                                            <div class="progress mb-2" style="height: 20px;">
+                                                @if ($hasRejection)
+                                                <div class="progress-bar bg-danger" role="progressbar" style="width: 100%">
+                                                    DIRESET - {{ $rejectedCount }} Penolakan
+                                                </div>
+                                                @else
+                                                <div class="progress-bar bg-success" role="progressbar" 
+                                                     style="width: {{ ($approvedCount/3)*100 }}%">
+                                                    {{ $approvedCount }}/3
+                                                </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <table class="table-data table table-bordered table-striped"
                                     style="font-size: 0.9em; width: 100%;">
                                     <thead>
@@ -123,21 +200,31 @@ $now = date('Y-m-d H:i:s');
                                             <td>
                                                 @if ($row->penilaiPertama)
                                                 {{ $row->penilaiPertama->nama }}
+                                                @else
+                                                <span class="text-muted"><i>Belum ditentukan</i></span>
                                                 @endif
                                             </td>
                                             <td>Penilai 1</td>
                                             <td>
-                                                @if ($row->status_approval_penilai1 === 1)
-                                                <span class="text-primary font-weight-bold">
-                                                    Diterima
+                                                @if (!$row->penilai1)
+                                                <span class="text-muted font-weight-bold">
+                                                    <i class="fas fa-user-plus mr-1"></i>Menunggu Penugasan
                                                 </span>
                                                 @elseif ($row->status_approval_penilai1 === 0)
                                                 <span class="text-danger font-weight-bold">
-                                                    Ditolak
+                                                    <i class="fas fa-times mr-1"></i>Ditolak - Reset Semua
+                                                </span>
+                                                @elseif ($row->status_approval_penilai2 === 0 || $row->status_approval_penilai3 === 0)
+                                                <span class="text-secondary font-weight-bold">
+                                                    <i class="fas fa-redo mr-1"></i>Direset (Penilai lain menolak)
+                                                </span>
+                                                @elseif ($row->status_approval_penilai1 === 1)
+                                                <span class="text-success font-weight-bold">
+                                                    <i class="fas fa-check mr-1"></i>Disetujui
                                                 </span>
                                                 @else
                                                 <span class="text-warning font-weight-bold">
-                                                    Menunggu Persetujuan
+                                                    <i class="fas fa-clock mr-1"></i>Menunggu Evaluasi
                                                 </span>
                                                 @endif
                                             </td>
@@ -169,21 +256,31 @@ $now = date('Y-m-d H:i:s');
                                             <td>
                                                 @if ($row->penilaiKedua)
                                                 {{ $row->penilaiKedua->nama }}
+                                                @else
+                                                <span class="text-muted"><i>Belum ditentukan</i></span>
                                                 @endif
                                             </td>
                                             <td>Penilai 2</td>
                                             <td>
-                                                @if ($row->status_approval_penilai2 === 1)
-                                                <span class="text-primary font-weight-bold">
-                                                    Diterima
+                                                @if (!$row->penilai2)
+                                                <span class="text-muted font-weight-bold">
+                                                    <i class="fas fa-user-plus mr-1"></i>Menunggu Penugasan
                                                 </span>
                                                 @elseif ($row->status_approval_penilai2 === 0)
                                                 <span class="text-danger font-weight-bold">
-                                                    Ditolak
+                                                    <i class="fas fa-times mr-1"></i>Ditolak - Reset Semua
+                                                </span>
+                                                @elseif ($row->status_approval_penilai1 === 0 || $row->status_approval_penilai3 === 0)
+                                                <span class="text-secondary font-weight-bold">
+                                                    <i class="fas fa-redo mr-1"></i>Direset (Penilai lain menolak)
+                                                </span>
+                                                @elseif ($row->status_approval_penilai2 === 1)
+                                                <span class="text-success font-weight-bold">
+                                                    <i class="fas fa-check mr-1"></i>Disetujui
                                                 </span>
                                                 @else
                                                 <span class="text-warning font-weight-bold">
-                                                    Menunggu Persetujuan
+                                                    <i class="fas fa-clock mr-1"></i>Menunggu Evaluasi
                                                 </span>
                                                 @endif
                                             </td>
@@ -215,21 +312,31 @@ $now = date('Y-m-d H:i:s');
                                             <td>
                                                 @if ($row->penilaiKetiga)
                                                 {{ $row->penilaiKetiga->nama }}
+                                                @else
+                                                <span class="text-muted"><i>Belum ditentukan</i></span>
                                                 @endif
                                             </td>
                                             <td>Penilai 3</td>
                                             <td>
-                                                @if ($row->status_approval_penilai3 === 1)
-                                                <span class="text-primary font-weight-bold">
-                                                    Diterima
+                                                @if (!$row->penilai3)
+                                                <span class="text-muted font-weight-bold">
+                                                    <i class="fas fa-user-plus mr-1"></i>Menunggu Penugasan
                                                 </span>
                                                 @elseif ($row->status_approval_penilai3 === 0)
                                                 <span class="text-danger font-weight-bold">
-                                                    Ditolak
+                                                    <i class="fas fa-times mr-1"></i>Ditolak - Reset Semua
+                                                </span>
+                                                @elseif ($row->status_approval_penilai1 === 0 || $row->status_approval_penilai2 === 0)
+                                                <span class="text-secondary font-weight-bold">
+                                                    <i class="fas fa-redo mr-1"></i>Direset (Penilai lain menolak)
+                                                </span>
+                                                @elseif ($row->status_approval_penilai3 === 1)
+                                                <span class="text-success font-weight-bold">
+                                                    <i class="fas fa-check mr-1"></i>Disetujui
                                                 </span>
                                                 @else
                                                 <span class="text-warning font-weight-bold">
-                                                    Menunggu Persetujuan
+                                                    <i class="fas fa-clock mr-1"></i>Menunggu Evaluasi
                                                 </span>
                                                 @endif
                                             </td>
@@ -260,7 +367,6 @@ $now = date('Y-m-d H:i:s');
 
                                     </tbody>
                                 </table>
-                                @endif
                             </div>
                         </div>
                         @endif

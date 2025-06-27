@@ -190,47 +190,68 @@ class PeriksaProposalController extends Controller
                 // Refresh proposal data and update status_akhir
                 $proposal = ProposalSkripsi::with('proposalSkripsiForm')->where('id', $request->proposal_id)->firstOrFail();
                 
-                // If current evaluation is a rejection, immediately set status to rejected
+                // RESET MECHANISM: If current evaluation is a rejection, reset ALL approvals
                 if ($request->status == '0') {
-                    $proposal->status_akhir = 0;
+                    // Reset all evaluator approvals to null (restart approval process)
+                    $proposal->status_approval_penilai1 = null;
+                    $proposal->status_approval_penilai2 = null;
+                    $proposal->status_approval_penilai3 = null;
+                    
+                    // Set the current evaluator's rejection
+                    if ($request->evaluator == 'penilai1') {
+                        $proposal->status_approval_penilai1 = 0;
+                    } elseif ($request->evaluator == 'penilai2') {
+                        $proposal->status_approval_penilai2 = 0;
+                    } elseif ($request->evaluator == 'penilai3') {
+                        $proposal->status_approval_penilai3 = 0;
+                    }
+                    
+                    // Clear other evaluators' rejection comments (fresh start)
+                    if ($request->evaluator !== 'penilai1') {
+                        $proposal->rejection_comment_penilai1 = null;
+                    }
+                    if ($request->evaluator !== 'penilai2') {
+                        $proposal->rejection_comment_penilai2 = null;
+                    }
+                    if ($request->evaluator !== 'penilai3') {
+                        $proposal->rejection_comment_penilai3 = null;
+                    }
+                    
+                    $proposal->status_akhir = null; // Back to evaluation state (not permanently rejected)
                     $proposal->save();
                 } else {
+                    // Current evaluation is an approval, check if we can proceed
+                    
                     // Check if any existing evaluation is a rejection
                     $hasRejection = ($proposal->status_approval_penilai1 === 0) || 
-                                   ($proposal->status_approval_penilai2 === 0) || 
-                                   ($proposal->status_approval_penilai3 === 0);
+                                  ($proposal->status_approval_penilai2 === 0) || 
+                                  ($proposal->status_approval_penilai3 === 0);
                     
                     if ($hasRejection) {
-                        $proposal->status_akhir = 0;
+                        // If there's still a rejection, cannot approve until rejection is resolved
+                        $proposal->status_akhir = null;
                         $proposal->save();
-                    } elseif ($proposal->status_approval_penilai1 !== null && $proposal->status_approval_penilai2 !== null && $proposal->status_approval_penilai3 !== null) {
-                        // All evaluators have completed their reviews and none rejected
-                        $active = TahunAjaran::where('status_aktif', 1)->firstOrFail();
-                        $pengaturan = Pengaturan::with('pengaturanDetail')
-                            ->where('tahun_ajaran_id', $active->id)
-                            ->where('program_studi_id', $proposal->proposalSkripsiForm->program_studi_id)
-                            ->firstOrFail();
-                        $jumlahSetuju = $pengaturan->pengaturanDetail->jumlah_setuju_proposal;
-                        $count = 0;
-                        if ($proposal->status_approval_penilai1 === 1) {
-                            $count++;
-                        }
-                        if ($proposal->status_approval_penilai2 === 1) {
-                            $count++;
-                        }
-                        if ($proposal->status_approval_penilai3 === 1) {
-                            $count++;
-                        }
-
-                        if ($count >= (int)$jumlahSetuju) {
-                            $proposal->status_akhir = 1;
-                            $proposal->save();
+                    } else {
+                        // No rejections, check if all 3 evaluators have been assigned and approved
+                        $allEvaluatorsAssigned = $proposal->penilai1 && $proposal->penilai2 && $proposal->penilai3;
+                        
+                        if ($allEvaluatorsAssigned) {
+                            $allApproved = ($proposal->status_approval_penilai1 === 1) && 
+                                         ($proposal->status_approval_penilai2 === 1) && 
+                                         ($proposal->status_approval_penilai3 === 1);
+                            
+                            if ($allApproved) {
+                                $proposal->status_akhir = 1; // All 3 approved - proposal passes
+                                $proposal->save();
+                            } else {
+                                $proposal->status_akhir = null; // Still waiting for remaining approvals
+                                $proposal->save();
+                            }
                         } else {
-                            $proposal->status_akhir = 0;
+                            $proposal->status_akhir = null; // Waiting for evaluator assignment
                             $proposal->save();
                         }
                     }
-                    // If not all evaluations are complete and no rejections, leave status_akhir as null (in progress)
                 }
             });
 
@@ -360,33 +381,24 @@ class PeriksaProposalController extends Controller
         if ($hasRejection) {
             $proposal->status_akhir = 0;
         } elseif ($proposal->status_approval_penilai1 !== null && $proposal->status_approval_penilai2 !== null && $proposal->status_approval_penilai3 !== null) {
-            // All evaluators have completed their reviews and none rejected
-            $active = TahunAjaran::where('status_aktif', 1)->first();
-            if ($active) {
-                $pengaturan = Pengaturan::with('pengaturanDetail')
-                    ->where('tahun_ajaran_id', $active->id)
-                    ->where('program_studi_id', $proposal->proposalSkripsiForm->program_studi_id)
-                    ->first();
-                
-                if ($pengaturan && $pengaturan->pengaturanDetail) {
-                    $jumlahSetuju = $pengaturan->pengaturanDetail->jumlah_setuju_proposal;
-                    $count = 0;
-                    if ($proposal->status_approval_penilai1 === 1) {
-                        $count++;
-                    }
-                    if ($proposal->status_approval_penilai2 === 1) {
-                        $count++;
-                    }
-                    if ($proposal->status_approval_penilai3 === 1) {
-                        $count++;
-                    }
+            // ALL 3 evaluators must approve for proposal to be fully submitted
+            // This ensures mahasiswa get exactly 3 approvals as required
+            $approvalCount = 0;
+            if ($proposal->status_approval_penilai1 === 1) {
+                $approvalCount++;
+            }
+            if ($proposal->status_approval_penilai2 === 1) {
+                $approvalCount++;
+            }
+            if ($proposal->status_approval_penilai3 === 1) {
+                $approvalCount++;
+            }
 
-                    if ($count >= (int)$jumlahSetuju) {
-                        $proposal->status_akhir = 1;
-                    } else {
-                        $proposal->status_akhir = 0;
-                    }
-                }
+            // Require ALL 3 approvals for full submission
+            if ($approvalCount === 3) {
+                $proposal->status_akhir = 1;
+            } else {
+                $proposal->status_akhir = 0;
             }
         } else {
             // Not all evaluations are complete and no rejections, leave as in progress

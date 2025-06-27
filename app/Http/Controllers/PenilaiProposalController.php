@@ -106,7 +106,21 @@ class PenilaiProposalController extends Controller
             'penilai1' => ['required'],
             'penilai2' => ['required'],
             'penilai3' => ['required'],
+        ], [
+            'penilai1.required' => 'Penilai 1 harus dipilih',
+            'penilai2.required' => 'Penilai 2 harus dipilih', 
+            'penilai3.required' => 'Penilai 3 harus dipilih',
         ]);
+
+        // Additional validation: all evaluators must be different
+        if ($request->penilai1 == $request->penilai2 || 
+            $request->penilai1 == $request->penilai3 || 
+            $request->penilai2 == $request->penilai3) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Semua penilai harus berbeda. Mahasiswa memerlukan 3 penilai yang berbeda untuk persetujuan penuh.',
+            ]);
+        }
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()]);
@@ -124,7 +138,7 @@ class PenilaiProposalController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Penilai berhasil ditambahkan',
+                'message' => 'Ketiga penilai berhasil ditambahkan. Mahasiswa sekarang memerlukan persetujuan dari ketiganya.',
             ]);
         } catch (\Exception $e) {
             return response()->json([

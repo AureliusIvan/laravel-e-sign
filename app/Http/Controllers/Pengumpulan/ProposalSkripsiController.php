@@ -166,8 +166,8 @@ class ProposalSkripsiController extends Controller
             'file_proposal' => $fileName,
             'file_proposal_random' => $fileNameRandom,
             'status' => 1,
-            'penilai1' => $pembimbing1,
-            'penilai2' => $pembimbing2,
+            // Note: penilai1, penilai2, penilai3 will be assigned later by admin/kaprodi
+            // to ensure 3 independent evaluators are assigned before evaluation can begin
             'is_expired' => false,
         ]);
     }
@@ -215,19 +215,15 @@ class ProposalSkripsiController extends Controller
             ->with('penilaiPertama', function ($query) {
                 $query->select('id', 'nama');
             })
-//            ->with('penilaiKedua', function ($query) {
-//                $query->select('id', 'nama');
-//            })
-//            ->with('penilaiKetiga', function ($query) {
-//                $query->select('id', 'nama');
-//            })
-            ->where('mahasiswa_id', $user->id)
-            ->where(function ($query) {
-                $query->where('penilai1', '!=', null);
-//                    ->where('penilai2', '!=', null)
-//                    ->where('penilai3', '!=', null);
+            ->with('penilaiKedua', function ($query) {
+                $query->select('id', 'nama');
             })
-            ->get();
+            ->with('penilaiKetiga', function ($query) {
+                $query->select('id', 'nama');
+            })
+            ->where('mahasiswa_id', $user->id)
+            ->get(); // Show all proposals for this student, regardless of evaluator assignment status
+            
 //        dd($result);
         if (count($result) <= 0) {
             $result = [];

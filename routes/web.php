@@ -399,4 +399,32 @@ Route::fallback(function () {
     abort(404);
 });
 
+// Test route to verify 3-approval requirement (can be removed after testing)
+Route::get('/test-approval-system', function () {
+    $proposals = \App\Models\ProposalSkripsi::with(['penilaiPertama', 'penilaiKedua', 'penilaiKetiga'])
+        ->get()
+        ->map(function ($proposal) {
+            return [
+                'id' => $proposal->id,
+                'judul' => $proposal->judul_proposal,
+                'mahasiswa_id' => $proposal->mahasiswa_id,
+                'penilai1' => $proposal->penilaiPertama ? $proposal->penilaiPertama->nama : 'Belum ditentukan',
+                'penilai2' => $proposal->penilaiKedua ? $proposal->penilaiKedua->nama : 'Belum ditentukan',
+                'penilai3' => $proposal->penilaiKetiga ? $proposal->penilaiKetiga->nama : 'Belum ditentukan',
+                'status_approval_1' => $proposal->status_approval_penilai1,
+                'status_approval_2' => $proposal->status_approval_penilai2,
+                'status_approval_3' => $proposal->status_approval_penilai3,
+                'status_akhir' => $proposal->status_akhir,
+                'memerlukan_3_approval' => ($proposal->penilai1 && $proposal->penilai2 && $proposal->penilai3) ? 'Ya' : 'Belum (penilai belum lengkap)',
+                'lulus_penuh' => ($proposal->status_approval_penilai1 === 1 && $proposal->status_approval_penilai2 === 1 && $proposal->status_approval_penilai3 === 1) ? 'Ya (3/3 approval)' : 'Belum'
+            ];
+        });
+    
+    return response()->json([
+        'message' => '3-Approval System Test',
+        'info' => 'Mahasiswa memerlukan persetujuan dari 3 penilai berbeda untuk lulus',
+        'proposals' => $proposals
+    ], 200, [], JSON_PRETTY_PRINT);
+});
+
 require __DIR__ . '/auth.php';

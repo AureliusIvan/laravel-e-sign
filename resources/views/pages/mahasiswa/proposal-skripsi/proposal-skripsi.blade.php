@@ -80,6 +80,16 @@
                                 </ul>
                             </div>
                         @endif
+
+                        <!-- Information about 3-approval requirement -->
+                        <div class="alert alert-info">
+                            <h5><i class="icon fas fa-info-circle"></i> Persyaratan Persetujuan</h5>
+                            <p class="mb-0">
+                                <strong>Proposal skripsi Anda memerlukan persetujuan dari 3 (tiga) penilai yang berbeda sebelum dapat dinyatakan lulus.</strong>
+                                <br>Setelah Anda mengumpulkan proposal, admin/kaprodi akan menentukan ketiga penilai. 
+                                Proposal akan dinyatakan lulus hanya jika <u>semua 3 penilai memberikan persetujuan</u>.
+                            </p>
+                        </div>
                         <!-- Card -->
                         @php
                             $now = date('Y-m-d H:i:s');

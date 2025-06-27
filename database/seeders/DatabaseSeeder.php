@@ -21,6 +21,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
+
 class DatabaseSeeder extends Seeder
 {
     /**
@@ -340,6 +341,61 @@ class DatabaseSeeder extends Seeder
                 ]
             );
 
+            // Create additional dosen accounts for testing (pembimbing2, penguji, ketua sidang)
+            $userDosen2 = User::updateOrCreate(
+                ['email' => 'dosen2@umn.ac.id'],
+                [
+                    'password' => Hash::make('password'),
+                    'role' => 'dosen',
+                ]
+            );
+
+            $dosen2 = Dosen::updateOrCreate(
+                ['nid' => '000002'],
+                [
+                    'user_id' => $userDosen2->id,
+                    'nama' => 'Dosen 2 (Pembimbing 2)',
+                    'gelar' => 'S.Kom., M.Kom',
+                    'program_studi_id' => 1,
+                ]
+            );
+
+            $userDosenPenguji = User::updateOrCreate(
+                ['email' => 'dosenpenguji@umn.ac.id'],
+                [
+                    'password' => Hash::make('password'),
+                    'role' => 'dosen',
+                ]
+            );
+
+            $dosenPenguji = Dosen::updateOrCreate(
+                ['nid' => '000003'],
+                [
+                    'user_id' => $userDosenPenguji->id,
+                    'nama' => 'Dr. Dosen Penguji',
+                    'gelar' => 'S.Kom., M.Kom., Ph.D',
+                    'program_studi_id' => 1,
+                ]
+            );
+
+            $userDosenKetuaSidang = User::updateOrCreate(
+                ['email' => 'dosenketua@umn.ac.id'],
+                [
+                    'password' => Hash::make('password'),
+                    'role' => 'dosen',
+                ]
+            );
+
+            $dosenKetuaSidang = Dosen::updateOrCreate(
+                ['nid' => '000004'],
+                [
+                    'user_id' => $userDosenKetuaSidang->id,
+                    'nama' => 'Prof. Dr. Ketua Sidang',
+                    'gelar' => 'S.Kom., M.Kom., Ph.D',
+                    'program_studi_id' => 1,
+                ]
+            );
+
             // Create mahasiswa account (for thesis purpose)
             $userMahasiswa = User::updateOrCreate(
                 ['email' => 'mahasiswa@umn.ac.id'],
@@ -366,7 +422,7 @@ class DatabaseSeeder extends Seeder
                 ['status_aktif' => 1]
             );
 
-            // Assign dosen as pembimbing to mahasiswa
+            // Assign dosen as pembimbing to mahasiswa (with pembimbing1 and pembimbing2)
             PembimbingMahasiswa::updateOrCreate(
                 [
                     'tahun_ajaran_id' => $tahunAjaran->id,
@@ -375,6 +431,7 @@ class DatabaseSeeder extends Seeder
                 [
                     'program_studi_id' => 1,
                     'pembimbing1' => $dosen->id,
+                    'pembimbing2' => $dosen2->id,
                 ]
             );
 
@@ -429,6 +486,13 @@ class DatabaseSeeder extends Seeder
                     'file_proposal' => '00000000001_Mahasiswa1_SistemInformasiManajemen.pdf',
                     'file_proposal_random' => '20241210_sample_proposal_random.pdf',
                     'status' => 1,
+                    'penilai1' => $dosen->id,
+                    'penilai2' => $dosenPenguji->id,
+                    'penilai3' => $dosenKetuaSidang->id,
+                    'status_approval_penilai1' => 1,
+                    'status_approval_penilai2' => 1,
+                    'status_approval_penilai3' => 1,
+                    'status_akhir' => 1, // Fully approved by all 3 evaluators
                     'available_at' => '2021-Ganjil',
                     'available_until' => '2021-Ganjil',
                     'is_expired' => 0,
@@ -449,6 +513,167 @@ class DatabaseSeeder extends Seeder
                     'research_list_id' => $researchTopic2->id,
                 ]
             );
+
+            // Create additional mahasiswa for testing different approval states
+            $userMahasiswa2 = User::updateOrCreate(
+                ['email' => 'mahasiswa2@umn.ac.id'],
+                [
+                    'password' => Hash::make('password'),
+                    'role' => 'mahasiswa',
+                ]
+            );
+
+            $mahasiswa2 = Mahasiswa::updateOrCreate(
+                ['nim' => '00000000002'],
+                [
+                    'user_id' => $userMahasiswa2->id,
+                    'nama' => 'Mahasiswa 2',
+                    'program_studi_id' => 1,
+                    'angkatan' => 2020,
+                    'status_aktif_skripsi' => 1,
+                ]
+            );
+
+            // Assign pembimbing to mahasiswa2
+            PembimbingMahasiswa::updateOrCreate(
+                [
+                    'tahun_ajaran_id' => $tahunAjaran->id,
+                    'mahasiswa' => $mahasiswa2->id,
+                ],
+                [
+                    'program_studi_id' => 1,
+                    'pembimbing1' => $dosen->id,
+                    'pembimbing2' => $dosen2->id,
+                ]
+            );
+
+            // Test Case 2: Proposal with partial approvals (2 out of 3 approved)
+            $proposalSkripsi2 = ProposalSkripsi::create([
+                'proposal_skripsi_form_id' => $proposalForm->id,
+                'mahasiswa_id' => $mahasiswa2->id,
+                'judul_proposal' => 'Implementasi Machine Learning untuk Analisis Sentimen Media Sosial',
+                'file_proposal' => '00000000002_Mahasiswa2_ImplementasiMachineLearning.pdf',
+                'file_proposal_random' => '20241210_sample_proposal2_random.pdf',
+                'status' => 1,
+                'penilai1' => $dosen->id,
+                'penilai2' => $dosenPenguji->id,
+                'penilai3' => $dosenKetuaSidang->id,
+                'status_approval_penilai1' => 1, // Approved
+                'status_approval_penilai2' => 1, // Approved
+                'status_approval_penilai3' => null, // Still waiting
+                'status_akhir' => null, // Not final yet - needs 3rd approval
+                'available_at' => '2021-Ganjil',
+                'available_until' => '2021-Ganjil',
+                'is_expired' => 0,
+            ]);
+
+            // Create mahasiswa3 for rejection test case
+            $userMahasiswa3 = User::updateOrCreate(
+                ['email' => 'mahasiswa3@umn.ac.id'],
+                [
+                    'password' => Hash::make('password'),
+                    'role' => 'mahasiswa',
+                ]
+            );
+
+            $mahasiswa3 = Mahasiswa::updateOrCreate(
+                ['nim' => '00000000003'],
+                [
+                    'user_id' => $userMahasiswa3->id,
+                    'nama' => 'Mahasiswa 3',
+                    'program_studi_id' => 1,
+                    'angkatan' => 2020,
+                    'status_aktif_skripsi' => 1,
+                ]
+            );
+
+            // Assign pembimbing to mahasiswa3
+            PembimbingMahasiswa::updateOrCreate(
+                [
+                    'tahun_ajaran_id' => $tahunAjaran->id,
+                    'mahasiswa' => $mahasiswa3->id,
+                ],
+                [
+                    'program_studi_id' => 1,
+                    'pembimbing1' => $dosen2->id,
+                    'pembimbing2' => $dosenPenguji->id,
+                ]
+            );
+
+            // Test Case 3: Proposal with one rejection (should reset all approvals)
+            $proposalSkripsi3 = ProposalSkripsi::create([
+                'proposal_skripsi_form_id' => $proposalForm->id,
+                'mahasiswa_id' => $mahasiswa3->id,
+                'judul_proposal' => 'Sistem Keamanan IoT dengan Blockchain Technology',
+                'file_proposal' => '00000000003_Mahasiswa3_SistemKeamananIoT.pdf',
+                'file_proposal_random' => '20241210_sample_proposal3_random.pdf',
+                'status' => 1,
+                'penilai1' => $dosen2->id,
+                'penilai2' => $dosenPenguji->id,
+                'penilai3' => $dosenKetuaSidang->id,
+                // Reset mechanism: when one rejects, all approvals are reset to null
+                'status_approval_penilai1' => null, // Reset due to penilai2 rejection
+                'status_approval_penilai2' => 0, // This evaluator rejected - causes reset
+                'status_approval_penilai3' => null, // Reset due to penilai2 rejection
+                'status_akhir' => null, // Back to evaluation state (not permanently rejected)
+                'rejection_comment_penilai2' => 'Metodologi penelitian perlu diperbaiki. Tinjauan pustaka kurang komprehensif. Silakan perbaiki dan ajukan ulang.',
+                'available_at' => '2021-Ganjil',
+                'available_until' => '2021-Ganjil',
+                'is_expired' => 0,
+            ]);
+
+            // Create mahasiswa4 for unassigned evaluators test case  
+            $userMahasiswa4 = User::updateOrCreate(
+                ['email' => 'mahasiswa4@umn.ac.id'],
+                [
+                    'password' => Hash::make('password'),
+                    'role' => 'mahasiswa',
+                ]
+            );
+
+            $mahasiswa4 = Mahasiswa::updateOrCreate(
+                ['nim' => '00000000004'],
+                [
+                    'user_id' => $userMahasiswa4->id,
+                    'nama' => 'Mahasiswa 4',
+                    'program_studi_id' => 1,
+                    'angkatan' => 2020,
+                    'status_aktif_skripsi' => 1,
+                ]
+            );
+
+            // Assign pembimbing to mahasiswa4
+            PembimbingMahasiswa::updateOrCreate(
+                [
+                    'tahun_ajaran_id' => $tahunAjaran->id,
+                    'mahasiswa' => $mahasiswa4->id,
+                ],
+                [
+                    'program_studi_id' => 1,
+                    'pembimbing1' => $dosen->id,
+                    'pembimbing2' => $dosenKetuaSidang->id,
+                ]
+            );
+
+            // Test Case 4: Proposal with only 1 evaluator assigned (waiting for admin to assign remaining)
+            $proposalSkripsi4 = ProposalSkripsi::create([
+                'proposal_skripsi_form_id' => $proposalForm->id,
+                'mahasiswa_id' => $mahasiswa4->id,
+                'judul_proposal' => 'Aplikasi Mobile Health Monitoring dengan React Native',
+                'file_proposal' => '00000000004_Mahasiswa4_AplikasiMobileHealth.pdf',
+                'file_proposal_random' => '20241210_sample_proposal4_random.pdf',
+                'status' => 1,
+                'penilai1' => $dosen->id, // Only 1 evaluator assigned
+                'penilai2' => null, // Waiting for assignment
+                'penilai3' => null, // Waiting for assignment
+                'status_approval_penilai1' => null, // Waiting for evaluation
+                'status_approval_penilai2' => null,
+                'status_approval_penilai3' => null,
+                'status_akhir' => null,
+                'available_at' => '2021-Ganjil',
+                'available_until' => '2021-Ganjil',
+                'is_expired' => 0,
+            ]);
         });
     }
 }

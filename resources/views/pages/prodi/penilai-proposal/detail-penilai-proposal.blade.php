@@ -67,6 +67,16 @@ $params = Request::segment(3);
                     </div>
                     @endif
 
+                    <!-- Information about 3-evaluator requirement -->
+                    <div class="alert alert-warning">
+                        <h5><i class="icon fas fa-exclamation-triangle"></i> Persyaratan Penilai</h5>
+                        <p class="mb-0">
+                            <strong>Setiap proposal skripsi HARUS memiliki 3 (tiga) penilai yang berbeda.</strong>
+                            <br>Mahasiswa akan dinyatakan lulus hanya jika <u>semua 3 penilai memberikan persetujuan</u>. 
+                            Pastikan Anda menentukan ketiga penilai sebelum evaluasi dapat dimulai.
+                        </p>
+                    </div>
+
                     <!-- Card -->
                     <div class="card card-outline card-info scroll">
                         <!-- Header -->
