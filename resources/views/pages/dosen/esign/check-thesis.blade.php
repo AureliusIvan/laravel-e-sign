@@ -108,7 +108,7 @@
                                         <th style="width: 10%;">Preview</th>
                                         <th style="width: 10%;">Approval</th>
                                         <th style="width: 15%;">
-                                            Download Signed Proposal
+                                            Download Signed Thesis
                                         </th>
                                     </tr>
                                     </thead>
@@ -128,13 +128,13 @@
                                                         <span class="badge badge-success">
                                                             <i class="fas fa-check-circle mr-1"></i>Diterima
                                                         </span>
-                                                    @elseif ($d->status_akhir === 0)
+                                                    @elseif ($d->status_akhir === 0 || $d->status_approval_penilai1 === 0 || $d->status_approval_penilai2 === 0 || $d->status_approval_penilai3 === 0)
                                                         <span class="badge badge-danger">
                                                             <i class="fas fa-times-circle mr-1"></i>Ditolak
                                                         </span>
-                                                    @elseif ($d->status_akhir === 1)
-                                                        <span class="badge badge-warning">
-                                                            <i class="fas fa-clock mr-1"></i>Tunggu Kaprodi
+                                                    @elseif ($d->status_akhir === 1 && $d->status_approval_penilai1 === 1 && $d->status_approval_penilai2 === 1 && $d->status_approval_penilai3 === 1)
+                                                        <span class="badge badge-success">
+                                                            <i class="fas fa-graduation-cap mr-1"></i>Lulus
                                                         </span>
                                                     @else
                                                         <span class="badge badge-secondary">

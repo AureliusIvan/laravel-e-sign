@@ -335,7 +335,7 @@ class DatabaseSeeder extends Seeder
                 ['nid' => '000001'],
                 [
                     'user_id' => $userDosen->id,
-                    'nama' => 'Dosen 1',
+                    'nama' => 'Dosen Pembimbing',
                     'gelar' => 'S.Kom., M.Kom',
                     'program_studi_id' => 1,
                 ]
@@ -354,7 +354,7 @@ class DatabaseSeeder extends Seeder
                 ['nid' => '000002'],
                 [
                     'user_id' => $userDosen2->id,
-                    'nama' => 'Dosen 2 (Pembimbing 2)',
+                    'nama' => 'Dosen 2',
                     'gelar' => 'S.Kom., M.Kom',
                     'program_studi_id' => 1,
                 ]
@@ -372,7 +372,7 @@ class DatabaseSeeder extends Seeder
                 ['nid' => '000003'],
                 [
                     'user_id' => $userDosenPenguji->id,
-                    'nama' => 'Dr. Dosen Penguji',
+                    'nama' => 'Dosen Penguji',
                     'gelar' => 'S.Kom., M.Kom., Ph.D',
                     'program_studi_id' => 1,
                 ]
@@ -390,7 +390,7 @@ class DatabaseSeeder extends Seeder
                 ['nid' => '000004'],
                 [
                     'user_id' => $userDosenKetuaSidang->id,
-                    'nama' => 'Prof. Dr. Ketua Sidang',
+                    'nama' => 'Kepala Prodi',
                     'gelar' => 'S.Kom., M.Kom., Ph.D',
                     'program_studi_id' => 1,
                 ]
@@ -612,8 +612,8 @@ class DatabaseSeeder extends Seeder
                 'penilai2' => $dosenPenguji->id,
                 'penilai3' => $dosenKetuaSidang->id,
                 // Reset mechanism: when one rejects, all approvals are reset to null
-                'status_approval_penilai1' => null, // Reset due to penilai2 rejection
-                'status_approval_penilai2' => 0, // This evaluator rejected - causes reset
+                'status_approval_penilai1' => 0, // Reset due to penilai2 rejection
+                'status_approval_penilai2' => null, // This evaluator rejected - causes reset
                 'status_approval_penilai3' => null, // Reset due to penilai2 rejection
                 'status_akhir' => null, // Back to evaluation state (not permanently rejected)
                 'rejection_comment_penilai2' => 'Metodologi penelitian perlu diperbaiki. Tinjauan pustaka kurang komprehensif. Silakan perbaiki dan ajukan ulang.',

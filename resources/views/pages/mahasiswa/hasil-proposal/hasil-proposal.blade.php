@@ -97,6 +97,19 @@ $now = date('Y-m-d H:i:s');
                                                     Lihat komentar penolakan di bawah.
                                                     @endif
                                                 </small>
+                                                <div class="alert alert-warning mt-3 p-3">
+                                                    <h5><i class="fas fa-exclamation-triangle mr-2"></i>Tindakan Diperlukan</h5>
+                                                    <p class="mb-2">Proposal Anda ditolak dan perlu diperbaiki. Silakan lakukan hal berikut:</p>
+                                                    <ol class="mb-3">
+                                                        <li>Baca dengan cermat komentar penolakan di bawah</li>
+                                                        <li>Download file revisi dari penilai yang menolak</li>
+                                                        <li>Perbaiki proposal sesuai masukan</li>
+                                                        <li>Upload ulang proposal yang sudah diperbaiki</li>
+                                                    </ol>
+                                                    <a href="{{ route('proposal.skripsi.form') }}" class="btn btn-warning">
+                                                        <i class="fas fa-edit mr-2"></i>Upload Ulang Proposal
+                                                    </a>
+                                                </div>
                                             @elseif ($row->status_akhir === 1)
                                                 <span class="badge badge-success p-2">
                                                     <i class="fas fa-check-circle mr-1"></i>Lulus (3/3 Approval)
@@ -124,6 +137,43 @@ $now = date('Y-m-d H:i:s');
                                             @endif
                                         </td>
                                     </tr>
+                                    @if ($row->signed_proposal)
+                                    <tr>
+                                        <th style="width: 25%;">Download Final Thesis</th>
+                                        <td>
+                                            <div class="alert alert-success p-3 mb-3">
+                                                <div class="d-flex align-items-center mb-2">
+                                                    <i class="fas fa-trophy mr-2 text-success"></i>
+                                                    <strong>SELAMAT! Proposal Anda Telah Disetujui</strong>
+                                                </div>
+                                                <p class="mb-3">Proposal skripsi Anda telah disetujui oleh ketiga penilai dan telah ditandatangani secara digital. File final dengan tanda tangan digital telah tersedia untuk didownload.</p>
+                                                
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <a href="{{ route('proposal.signed.download', basename($row->signed_proposal)) }}" 
+                                                       class="btn btn-success btn-lg mr-2 mb-2">
+                                                        <i class="fas fa-download mr-2"></i>
+                                                        Download Final Signed Thesis
+                                                    </a>
+                                                    
+                                                    <a href="{{ route('proposal.signed.download', basename($row->signed_proposal)) }}" 
+                                                       class="btn btn-outline-success btn-lg mb-2"
+                                                       target="_blank">
+                                                        <i class="fas fa-eye mr-2"></i>
+                                                        Preview Final Thesis
+                                                    </a>
+                                                </div>
+                                                
+                                                <div class="mt-3">
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-info-circle mr-1"></i>
+                                                        File ini merupakan dokumen resmi yang telah ditandatangani digital oleh ketiga penilai. 
+                                                        Simpan file ini dengan baik untuk keperluan administrasi selanjutnya.
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    @endif
                                 </table>
                                 <!-- Always show the 3-evaluator status table -->
                                 <div class="alert alert-light border">
@@ -230,20 +280,40 @@ $now = date('Y-m-d H:i:s');
                                             </td>
                                             <td>
                                                 @if ($row->file_penilai1 !== null)
-                                                <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai1', $row->uuid) }}"
-                                                    class="btn btn-info btn-sm" target="_blank">
-                                                    <i class="fas fa-download mr-1"></i>
-                                                    Download
-                                                </a>
+                                                    @if ($row->status_approval_penilai1 === 0)
+                                                    <div class="alert alert-warning p-2 mb-1">
+                                                        <small><strong><i class="fas fa-exclamation-triangle mr-1"></i>FILE REVISI PENOLAKAN</strong></small>
+                                                    </div>
+                                                    <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai1', $row->uuid) }}"
+                                                        class="btn btn-danger btn-sm" target="_blank">
+                                                        <i class="fas fa-download mr-1"></i>
+                                                        Download Revisi
+                                                    </a>
+                                                    @else
+                                                    <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai1', $row->uuid) }}"
+                                                        class="btn btn-info btn-sm" target="_blank">
+                                                        <i class="fas fa-download mr-1"></i>
+                                                        Download
+                                                    </a>
+                                                    @endif
                                                 @else
                                                 <span class="text-muted">-</span>
                                                 @endif
                                             </td>
                                             <td>
                                                 @if ($row->status_approval_penilai1 === 0 && $row->rejection_comment_penilai1)
-                                                <div class="alert alert-danger p-2 mb-0">
-                                                    <strong><i class="fas fa-comment-alt mr-1"></i>Komentar Penolakan:</strong><br>
-                                                    {{ $row->rejection_comment_penilai1 }}
+                                                <div class="alert alert-danger p-3 mb-0 border-left-danger">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <i class="fas fa-exclamation-circle mr-2 text-danger"></i>
+                                                        <strong>KOMENTAR PENOLAKAN - REVISI DIPERLUKAN</strong>
+                                                    </div>
+                                                    <p class="mb-2">{{ $row->rejection_comment_penilai1 }}</p>
+                                                    @if ($row->file_penilai1)
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        File revisi tersedia untuk didownload di kolom sebelah
+                                                    </small>
+                                                    @endif
                                                 </div>
                                                 @elseif ($row->status_approval_penilai1 === 1)
                                                 <span class="text-success"><i class="fas fa-check-circle mr-1"></i>Disetujui</span>
@@ -286,20 +356,40 @@ $now = date('Y-m-d H:i:s');
                                             </td>
                                             <td>
                                                 @if ($row->file_penilai2 !== null)
-                                                <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai2', $row->uuid) }}"
-                                                    class="btn btn-info btn-sm" target="_blank">
-                                                    <i class="fas fa-download mr-1"></i>
-                                                    Download
-                                                </a>
+                                                    @if ($row->status_approval_penilai2 === 0)
+                                                    <div class="alert alert-warning p-2 mb-1">
+                                                        <small><strong><i class="fas fa-exclamation-triangle mr-1"></i>FILE REVISI PENOLAKAN</strong></small>
+                                                    </div>
+                                                    <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai2', $row->uuid) }}"
+                                                        class="btn btn-danger btn-sm" target="_blank">
+                                                        <i class="fas fa-download mr-1"></i>
+                                                        Download Revisi
+                                                    </a>
+                                                    @else
+                                                    <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai2', $row->uuid) }}"
+                                                        class="btn btn-info btn-sm" target="_blank">
+                                                        <i class="fas fa-download mr-1"></i>
+                                                        Download
+                                                    </a>
+                                                    @endif
                                                 @else
                                                 <span class="text-muted">-</span>
                                                 @endif
                                             </td>
                                             <td>
                                                 @if ($row->status_approval_penilai2 === 0 && $row->rejection_comment_penilai2)
-                                                <div class="alert alert-danger p-2 mb-0">
-                                                    <strong><i class="fas fa-comment-alt mr-1"></i>Komentar Penolakan:</strong><br>
-                                                    {{ $row->rejection_comment_penilai2 }}
+                                                <div class="alert alert-danger p-3 mb-0 border-left-danger">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <i class="fas fa-exclamation-circle mr-2 text-danger"></i>
+                                                        <strong>KOMENTAR PENOLAKAN - REVISI DIPERLUKAN</strong>
+                                                    </div>
+                                                    <p class="mb-2">{{ $row->rejection_comment_penilai2 }}</p>
+                                                    @if ($row->file_penilai2)
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        File revisi tersedia untuk didownload di kolom sebelah
+                                                    </small>
+                                                    @endif
                                                 </div>
                                                 @elseif ($row->status_approval_penilai2 === 1)
                                                 <span class="text-success"><i class="fas fa-check-circle mr-1"></i>Disetujui</span>
@@ -342,20 +432,40 @@ $now = date('Y-m-d H:i:s');
                                             </td>
                                             <td>
                                                 @if ($row->file_penilai3 !== null)
-                                                <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai3', $row->uuid) }}"
-                                                    class="btn btn-info btn-sm" target="_blank">
-                                                    <i class="fas fa-download mr-1"></i>
-                                                    Download
-                                                </a>
+                                                    @if ($row->status_approval_penilai3 === 0)
+                                                    <div class="alert alert-warning p-2 mb-1">
+                                                        <small><strong><i class="fas fa-exclamation-triangle mr-1"></i>FILE REVISI PENOLAKAN</strong></small>
+                                                    </div>
+                                                    <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai3', $row->uuid) }}"
+                                                        class="btn btn-danger btn-sm" target="_blank">
+                                                        <i class="fas fa-download mr-1"></i>
+                                                        Download Revisi
+                                                    </a>
+                                                    @else
+                                                    <a href="{{ route('proposal.skripsi.hasil.download-file-periksa-penilai3', $row->uuid) }}"
+                                                        class="btn btn-info btn-sm" target="_blank">
+                                                        <i class="fas fa-download mr-1"></i>
+                                                        Download
+                                                    </a>
+                                                    @endif
                                                 @else
                                                 <span class="text-muted">-</span>
                                                 @endif
                                             </td>
                                             <td>
                                                 @if ($row->status_approval_penilai3 === 0 && $row->rejection_comment_penilai3)
-                                                <div class="alert alert-danger p-2 mb-0">
-                                                    <strong><i class="fas fa-comment-alt mr-1"></i>Komentar Penolakan:</strong><br>
-                                                    {{ $row->rejection_comment_penilai3 }}
+                                                <div class="alert alert-danger p-3 mb-0 border-left-danger">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <i class="fas fa-exclamation-circle mr-2 text-danger"></i>
+                                                        <strong>KOMENTAR PENOLAKAN - REVISI DIPERLUKAN</strong>
+                                                    </div>
+                                                    <p class="mb-2">{{ $row->rejection_comment_penilai3 }}</p>
+                                                    @if ($row->file_penilai3)
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-file-alt mr-1"></i>
+                                                        File revisi tersedia untuk didownload di kolom sebelah
+                                                    </small>
+                                                    @endif
                                                 </div>
                                                 @elseif ($row->status_approval_penilai3 === 1)
                                                 <span class="text-success"><i class="fas fa-check-circle mr-1"></i>Disetujui</span>

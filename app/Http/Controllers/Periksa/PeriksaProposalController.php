@@ -146,6 +146,17 @@ class PeriksaProposalController extends Controller
 
                 $proposal = ProposalSkripsi::where('id', $request->proposal_id)->firstOrFail();
 
+                // Check for sequential approval - penilai2 can only approve if penilai1 approved
+                // penilai3 can only approve if penilai1 and penilai2 approved
+                if ($request->status == '1') { // If approving
+                    if ($penilai == 2 && $proposal->status_approval_penilai1 !== 1) {
+                        throw new Exception('Penilai 1 harus menyetujui terlebih dahulu sebelum Penilai 2 dapat menilai');
+                    }
+                    if ($penilai == 3 && ($proposal->status_approval_penilai1 !== 1 || $proposal->status_approval_penilai2 !== 1)) {
+                        throw new Exception('Penilai 1 dan Penilai 2 harus menyetujui terlebih dahulu sebelum Penilai 3 dapat menilai');
+                    }
+                }
+
                 // Base approval fields
                 $penilaiFields = [
                     'status_approval_penilai' . $penilai => $request->status,
@@ -171,6 +182,23 @@ class PeriksaProposalController extends Controller
 
                 // Check if the penilai is valid
                 if (in_array($penilai, [1, 2, 3])) {
+                    // If any lecturer rejects, reset subsequent approvals
+                    if ($request->status == '0') {
+                        // Reset approvals of subsequent evaluators
+                        if ($penilai == 1) {
+                            $proposal->status_approval_penilai2 = null;
+                            $proposal->status_approval_penilai3 = null;
+                            $proposal->tanggal_approval_penilai2 = null;
+                            $proposal->tanggal_approval_penilai3 = null;
+                            $proposal->rejection_comment_penilai2 = null;
+                            $proposal->rejection_comment_penilai3 = null;
+                        } elseif ($penilai == 2) {
+                            $proposal->status_approval_penilai3 = null;
+                            $proposal->tanggal_approval_penilai3 = null;
+                            $proposal->rejection_comment_penilai3 = null;
+                        }
+                    }
+
                     // Update proposal fields dynamically
                     foreach ($penilaiFields as $field => $value) {
                         $proposal->{$field} = $value;
@@ -186,71 +214,34 @@ class PeriksaProposalController extends Controller
                     throw new Exception('Gagal menyimpan data');
                 }
 
-
                 // Refresh proposal data and update status_akhir
                 $proposal = ProposalSkripsi::with('proposalSkripsiForm')->where('id', $request->proposal_id)->firstOrFail();
                 
-                // RESET MECHANISM: If current evaluation is a rejection, reset ALL approvals
-                if ($request->status == '0') {
-                    // Reset all evaluator approvals to null (restart approval process)
-                    $proposal->status_approval_penilai1 = null;
-                    $proposal->status_approval_penilai2 = null;
-                    $proposal->status_approval_penilai3 = null;
-                    
-                    // Set the current evaluator's rejection
-                    if ($request->evaluator == 'penilai1') {
-                        $proposal->status_approval_penilai1 = 0;
-                    } elseif ($request->evaluator == 'penilai2') {
-                        $proposal->status_approval_penilai2 = 0;
-                    } elseif ($request->evaluator == 'penilai3') {
-                        $proposal->status_approval_penilai3 = 0;
-                    }
-                    
-                    // Clear other evaluators' rejection comments (fresh start)
-                    if ($request->evaluator !== 'penilai1') {
-                        $proposal->rejection_comment_penilai1 = null;
-                    }
-                    if ($request->evaluator !== 'penilai2') {
-                        $proposal->rejection_comment_penilai2 = null;
-                    }
-                    if ($request->evaluator !== 'penilai3') {
-                        $proposal->rejection_comment_penilai3 = null;
-                    }
-                    
-                    $proposal->status_akhir = null; // Back to evaluation state (not permanently rejected)
+                // If any lecturer rejects, set overall status to rejected (status_akhir = 0)
+                if ($proposal->status_approval_penilai1 === 0 || 
+                    $proposal->status_approval_penilai2 === 0 || 
+                    $proposal->status_approval_penilai3 === 0) {
+                    $proposal->status_akhir = 0; // Rejected
                     $proposal->save();
                 } else {
-                    // Current evaluation is an approval, check if we can proceed
+                    // Check if all evaluators are assigned and all have approved
+                    $allEvaluatorsAssigned = $proposal->penilai1 && $proposal->penilai2 && $proposal->penilai3;
                     
-                    // Check if any existing evaluation is a rejection
-                    $hasRejection = ($proposal->status_approval_penilai1 === 0) || 
-                                  ($proposal->status_approval_penilai2 === 0) || 
-                                  ($proposal->status_approval_penilai3 === 0);
-                    
-                    if ($hasRejection) {
-                        // If there's still a rejection, cannot approve until rejection is resolved
-                        $proposal->status_akhir = null;
-                        $proposal->save();
-                    } else {
-                        // No rejections, check if all 3 evaluators have been assigned and approved
-                        $allEvaluatorsAssigned = $proposal->penilai1 && $proposal->penilai2 && $proposal->penilai3;
+                    if ($allEvaluatorsAssigned) {
+                        $allApproved = ($proposal->status_approval_penilai1 === 1) && 
+                                     ($proposal->status_approval_penilai2 === 1) && 
+                                     ($proposal->status_approval_penilai3 === 1);
                         
-                        if ($allEvaluatorsAssigned) {
-                            $allApproved = ($proposal->status_approval_penilai1 === 1) && 
-                                         ($proposal->status_approval_penilai2 === 1) && 
-                                         ($proposal->status_approval_penilai3 === 1);
-                            
-                            if ($allApproved) {
-                                $proposal->status_akhir = 1; // All 3 approved - proposal passes
-                                $proposal->save();
-                            } else {
-                                $proposal->status_akhir = null; // Still waiting for remaining approvals
-                                $proposal->save();
-                            }
+                        if ($allApproved) {
+                            $proposal->status_akhir = 1; // All approved - proposal passes
+                            $proposal->save();
                         } else {
-                            $proposal->status_akhir = null; // Waiting for evaluator assignment
+                            $proposal->status_akhir = null; // Still in evaluation
                             $proposal->save();
                         }
+                    } else {
+                        $proposal->status_akhir = null; // Waiting for evaluator assignment
+                        $proposal->save();
                     }
                 }
             });
