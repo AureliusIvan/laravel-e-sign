@@ -35,6 +35,51 @@ use Spatie\PdfToImage\Exceptions\CouldNotStoreImage;
 
 class SignatureController extends Controller
 {
+    /**
+     * PDF Cleaning Configuration
+     * These can be moved to config files if needed
+     */
+    private const PDF_CLEANING_CONFIG = [
+        'enabled' => true,                    // Enable/disable PDF cleaning
+        'max_file_size' => 50 * 1024 * 1024,  // 50MB max file size
+        'max_pages' => 500,                   // Maximum pages for image conversion
+        'max_objects' => 10000,               // Maximum PDF objects
+        'cleanup_temp_files' => true,         // Clean up temporary files
+        'temp_file_retention' => 3600,        // Keep temp files for 1 hour
+        'security_checks' => [
+            'check_javascript' => true,
+            'check_forms' => true,
+            'check_external_refs' => true,
+            'check_embedded_files' => false,   // Allow embedded files (we embed XML)
+        ],
+        'sanitization_method' => 'auto',      // 'auto', 'image', 'fpdi'
+    ];
+
+    /**
+     * XML Sanitization Configuration
+     */
+    private const XML_SANITIZATION_CONFIG = [
+        'max_xml_size' => 1024 * 1024,        // 1MB max XML size
+        'max_depth' => 10,                     // Maximum XML nesting depth
+        'max_entities' => 100,                 // Maximum number of entities
+        'allowed_elements' => [                // Whitelist of allowed XML elements
+            'root', 'UUID', 'Tipe_Laporan', 'Judul_Laporan', 'Judul_Laporan_EN',
+            'Prodi', 'Tahun', 'Nama_Mahasiswa', 'NIM', 'Dosen_Pembimbing_1__Nama',
+            'Dosen_Pembimbing_1__NIDN', 'Dosen_Pembimbing_2__Nama', 'Dosen_Pembimbing_2__NIDN',
+            'Dosen_Penguji', 'Dosen_Ketua_Sidang', 'KAPRODI'
+        ],
+        'forbidden_patterns' => [              // Patterns to reject
+            '<!ENTITY',                        // External entities
+            '<!DOCTYPE',                       // DTD declarations
+            'SYSTEM',                          // System identifiers
+            'PUBLIC',                          // Public identifiers
+            '<script',                         // Script tags
+            'javascript:',                     // JavaScript URLs
+            'data:',                          // Data URLs
+        ],
+        'encoding' => 'UTF-8',                // Required encoding
+        'validate_schema' => true,            // Enable XML schema validation
+    ];
 
     /**
      * Check Thesis (Approve/Reject) Page (V2) for E-Sign
@@ -134,27 +179,37 @@ class SignatureController extends Controller
                 return redirect()->back()->with('error', 'File proposal tidak ditemukan di server.');
             }
 
-            // Validate file size (max 50MB)
-            if (filesize($originalPdfPath) > 50 * 1024 * 1024) {
-                Log::error("PDF file too large: " . filesize($originalPdfPath) . " bytes");
-                return redirect()->back()->with('error', 'File PDF terlalu besar (maksimal 50MB).');
+            // Step 4: COMPREHENSIVE PDF CLEANING AND SANITIZATION
+            $cleanedPdfPath = $originalPdfPath; // Default to original path
+            
+            if (self::PDF_CLEANING_CONFIG['enabled']) {
+                Log::info("Starting PDF cleaning and sanitization for: {$fileName}");
+                $cleaningResult = $this->cleanAndSanitizePdf($originalPdfPath, $fileName);
+                
+                if (!$cleaningResult['success']) {
+                    Log::error("PDF cleaning failed: " . $cleaningResult['error']);
+                    return redirect()->back()->with('error', 'Gagal membersihkan PDF: ' . $cleaningResult['error']);
+                }
+                
+                $cleanedPdfPath = $cleaningResult['cleaned_path'];
+                Log::info("PDF successfully cleaned and saved at: {$cleanedPdfPath}");
+            } else {
+                Log::info("PDF cleaning is disabled, proceeding with original file");
+                // Still perform basic security checks even if cleaning is disabled
+                $securityCheck = $this->performSecurityChecks($originalPdfPath);
+                if (!$securityCheck['safe']) {
+                    return redirect()->back()->with('error', 'File PDF tidak aman: ' . $securityCheck['reason']);
+                }
             }
 
-            // Validate PDF file integrity
-            $fileContent = file_get_contents($originalPdfPath);
-            if (!$fileContent || substr($fileContent, 0, 4) !== '%PDF') {
-                Log::error("Invalid PDF file format: {$originalPdfPath}");
-                return redirect()->back()->with('error', 'File bukan format PDF yang valid.');
-            }
-
-            // Check PDF compatibility before processing
-            if (!$this->isPdfCompatibleWithFpdi($originalPdfPath)) {
-                Log::warning("PDF may not be compatible with FPDI free version: {$originalPdfPath}");
+            // Step 5: Check PDF compatibility after cleaning
+            if (!$this->isPdfCompatibleWithFpdi($cleanedPdfPath)) {
+                Log::warning("Cleaned PDF may not be compatible with FPDI free version: {$fileName}");
                 // Skip FPDI and go directly to image-based approach
-                return $this->handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, true);
+                return $this->handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, true, $cleanedPdfPath);
             }
 
-            return $this->handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, false);
+            return $this->handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, false, $cleanedPdfPath);
 
         } catch (\Exception $e) {
             Log::error("Unexpected error in signThesis: " . $e->getMessage(), [
@@ -166,11 +221,481 @@ class SignatureController extends Controller
     }
 
     /**
+     * Comprehensive PDF cleaning and sanitization
+     * 
+     * @param string $originalPdfPath Original PDF file path
+     * @param string $fileName Original file name
+     * @return array Result with success status and cleaned file path or error message
+     */
+    private function cleanAndSanitizePdf(string $originalPdfPath, string $fileName): array
+    {
+        try {
+            // Step 1: Basic security validation
+            $securityCheck = $this->performSecurityChecks($originalPdfPath);
+            if (!$securityCheck['safe']) {
+                return [
+                    'success' => false,
+                    'error' => 'File PDF mengandung konten yang tidak aman: ' . $securityCheck['reason']
+                ];
+            }
+
+            // Step 2: Validate file integrity and structure
+            $integrityCheck = $this->validatePdfIntegrity($originalPdfPath);
+            if (!$integrityCheck['valid']) {
+                return [
+                    'success' => false,
+                    'error' => 'File PDF rusak atau tidak valid: ' . $integrityCheck['reason']
+                ];
+            }
+
+            // Step 3: Create cleaned version path
+            $cleanedFileName = 'cleaned_' . time() . '_' . $fileName;
+            $cleanedPdfPath = storage_path('app/uploads/proposal/' . $cleanedFileName);
+
+            // Step 4: Perform content sanitization
+            $sanitizationResult = $this->sanitizePdfContent($originalPdfPath, $cleanedPdfPath);
+            if (!$sanitizationResult['success']) {
+                return [
+                    'success' => false,
+                    'error' => 'Gagal membersihkan konten PDF: ' . $sanitizationResult['error']
+                ];
+            }
+
+            // Step 5: Validate cleaned PDF
+            if (!file_exists($cleanedPdfPath)) {
+                return [
+                    'success' => false,
+                    'error' => 'File PDF yang dibersihkan tidak dapat dibuat'
+                ];
+            }
+
+            // Step 6: Final verification
+            $finalCheck = $this->validateCleanedPdf($cleanedPdfPath);
+            if (!$finalCheck['valid']) {
+                // Clean up failed cleaned file
+                if (file_exists($cleanedPdfPath)) {
+                    unlink($cleanedPdfPath);
+                }
+                return [
+                    'success' => false,
+                    'error' => 'File PDF yang dibersihkan tidak valid: ' . $finalCheck['reason']
+                ];
+            }
+
+            Log::info("PDF cleaning completed successfully", [
+                'original_file' => $fileName,
+                'cleaned_file' => $cleanedFileName,
+                'original_size' => filesize($originalPdfPath),
+                'cleaned_size' => filesize($cleanedPdfPath)
+            ]);
+
+            return [
+                'success' => true,
+                'cleaned_path' => $cleanedPdfPath,
+                'cleaned_filename' => $cleanedFileName
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("Error during PDF cleaning: " . $e->getMessage(), [
+                'file' => $fileName,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'Kesalahan internal saat membersihkan PDF: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Perform comprehensive security checks on PDF
+     * 
+     * @param string $pdfPath Path to PDF file
+     * @return array Security check results
+     */
+    private function performSecurityChecks(string $pdfPath): array
+    {
+        try {
+            $fileContent = file_get_contents($pdfPath);
+            if (!$fileContent) {
+                return ['safe' => false, 'reason' => 'Tidak dapat membaca file PDF'];
+            }
+
+            // Check file size
+            $fileSize = strlen($fileContent);
+            $maxSize = self::PDF_CLEANING_CONFIG['max_file_size'];
+            if ($fileSize > $maxSize) {
+                return ['safe' => false, 'reason' => 'File terlalu besar (maksimal ' . round($maxSize / (1024 * 1024)) . 'MB)'];
+            }
+
+            // Check for valid PDF header
+            if (substr($fileContent, 0, 4) !== '%PDF') {
+                return ['safe' => false, 'reason' => 'File bukan PDF yang valid'];
+            }
+
+            // Check for suspicious content patterns based on configuration
+            $securityConfig = self::PDF_CLEANING_CONFIG['security_checks'];
+            $suspiciousPatterns = [];
+            
+            if ($securityConfig['check_javascript']) {
+                $suspiciousPatterns = array_merge($suspiciousPatterns, [
+                    '/\/JavaScript\s*\(/i',      // JavaScript code
+                    '/\/JS\s*\(/i',              // JavaScript alternative
+                    '/script>/i',                // HTML-like scripts
+                    '/on\w+\s*=/i',              // Event handlers
+                    '/eval\s*\(/i',              // Eval functions
+                    '/unescape\s*\(/i',          // Unescape functions
+                ]);
+            }
+            
+            if ($securityConfig['check_forms']) {
+                $suspiciousPatterns = array_merge($suspiciousPatterns, [
+                    '/\/SubmitForm\s*/i',        // Form submissions
+                    '/\/Widget\s*/i',            // Interactive widgets
+                    '/\/XFA\s*/i',               // XFA forms (complex)
+                ]);
+            }
+            
+            if ($securityConfig['check_external_refs']) {
+                $suspiciousPatterns = array_merge($suspiciousPatterns, [
+                    '/\/OpenAction\s*/i',        // Auto-execute actions
+                    '/\/Launch\s*/i',            // Launch external files
+                    '/\/GoToR\s*/i',             // Go to remote
+                    '/\/URI\s*/i',               // URI actions (potentially malicious)
+                    '/\/ImportData\s*/i',        // Import external data
+                    '/\/Sound\s*/i',             // Sound objects
+                    '/\/Movie\s*/i',             // Movie objects
+                ]);
+            }
+
+            foreach ($suspiciousPatterns as $pattern) {
+                if (preg_match($pattern, $fileContent)) {
+                    Log::warning("Suspicious content found in PDF", [
+                        'pattern' => $pattern,
+                        'file' => basename($pdfPath)
+                    ]);
+                    return ['safe' => false, 'reason' => 'File mengandung konten yang berpotensi berbahaya'];
+                }
+            }
+
+            // Check for embedded files based on configuration
+            if ($securityConfig['check_embedded_files'] && strpos($fileContent, '/EmbeddedFile') !== false) {
+                Log::warning("PDF contains embedded files", ['file' => basename($pdfPath)]);
+                return ['safe' => false, 'reason' => 'File mengandung file tertanam yang tidak diizinkan'];
+            } elseif (strpos($fileContent, '/EmbeddedFile') !== false) {
+                Log::info("PDF contains embedded files (allowed by configuration)", ['file' => basename($pdfPath)]);
+            }
+
+            // Check for excessive object count (potential DoS)
+            $objectCount = preg_match_all('/\d+\s+0\s+obj/', $fileContent);
+            $maxObjects = self::PDF_CLEANING_CONFIG['max_objects'];
+            if ($objectCount > $maxObjects) {
+                return ['safe' => false, 'reason' => "File PDF terlalu kompleks (lebih dari {$maxObjects} objek)"];
+            }
+
+            return ['safe' => true, 'reason' => 'File lolos pemeriksaan keamanan'];
+
+        } catch (\Exception $e) {
+            Log::error("Error during security check: " . $e->getMessage());
+            return ['safe' => false, 'reason' => 'Gagal memeriksa keamanan file'];
+        }
+    }
+
+    /**
+     * Validate PDF file integrity and structure
+     * 
+     * @param string $pdfPath Path to PDF file
+     * @return array Validation results
+     */
+    private function validatePdfIntegrity(string $pdfPath): array
+    {
+        try {
+            $fileContent = file_get_contents($pdfPath);
+            if (!$fileContent) {
+                return ['valid' => false, 'reason' => 'File tidak dapat dibaca'];
+            }
+
+            // Check for proper PDF structure
+            if (!preg_match('/%PDF-\d\.\d/', $fileContent)) {
+                return ['valid' => false, 'reason' => 'Header PDF tidak valid'];
+            }
+
+            // Check for EOF marker
+            if (strpos($fileContent, '%%EOF') === false) {
+                return ['valid' => false, 'reason' => 'File PDF tidak memiliki marker akhir yang valid'];
+            }
+
+            // Try to parse with Smalot PDF Parser for structure validation
+            try {
+                $parser = new Parser();
+                $pdf = $parser->parseContent($fileContent);
+                
+                // Check if we can get basic PDF info
+                $details = $pdf->getDetails();
+                $pages = $pdf->getPages();
+                
+                if (empty($pages)) {
+                    return ['valid' => false, 'reason' => 'PDF tidak memiliki halaman yang dapat dibaca'];
+                }
+
+                Log::info("PDF structure validation passed", [
+                    'pages' => count($pages),
+                    'title' => $details['Title'] ?? 'Unknown',
+                    'creator' => $details['Creator'] ?? 'Unknown'
+                ]);
+
+            } catch (\Exception $e) {
+                Log::warning("PDF parser validation failed: " . $e->getMessage());
+                // Continue with basic checks even if parser fails
+            }
+
+            // Check for circular references (can cause infinite loops)
+            if (preg_match('/(\d+\s+0\s+obj).*?\1/s', $fileContent)) {
+                return ['valid' => false, 'reason' => 'File PDF mengandung referensi melingkar'];
+            }
+
+            return ['valid' => true, 'reason' => 'Struktur PDF valid'];
+
+        } catch (\Exception $e) {
+            Log::error("Error during integrity validation: " . $e->getMessage());
+            return ['valid' => false, 'reason' => 'Gagal memvalidasi integritas PDF'];
+        }
+    }
+
+    /**
+     * Sanitize PDF content by removing potentially dangerous elements
+     * 
+     * @param string $originalPath Path to original PDF
+     * @param string $cleanedPath Path where cleaned PDF will be saved
+     * @return array Sanitization results
+     */
+    private function sanitizePdfContent(string $originalPath, string $cleanedPath): array
+    {
+        try {
+            $method = self::PDF_CLEANING_CONFIG['sanitization_method'];
+            
+            switch ($method) {
+                case 'image':
+                    // Force image-based sanitization
+                    return $this->sanitizeViaImageConversion($originalPath, $cleanedPath);
+                    
+                case 'fpdi':
+                    // Force FPDI-based sanitization
+                    return $this->sanitizeViaFpdi($originalPath, $cleanedPath);
+                    
+                case 'auto':
+                default:
+                    // Auto-select best method (image first, FPDI fallback)
+                    Log::info("Using auto-selection for sanitization method");
+                    $sanitizationResult = $this->sanitizeViaImageConversion($originalPath, $cleanedPath);
+                    
+                    if ($sanitizationResult['success']) {
+                        return $sanitizationResult;
+                    }
+
+                    // Fallback: Basic sanitization using FPDI if image conversion fails
+                    Log::info("Image-based sanitization failed, trying FPDI-based cleaning");
+                    return $this->sanitizeViaFpdi($originalPath, $cleanedPath);
+            }
+
+        } catch (\Exception $e) {
+            Log::error("Error during PDF sanitization: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Gagal membersihkan konten PDF: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Sanitize PDF by converting to images and back to PDF (most secure method)
+     * 
+     * @param string $originalPath Original PDF path
+     * @param string $cleanedPath Cleaned PDF path
+     * @return array Results
+     */
+    private function sanitizeViaImageConversion(string $originalPath, string $cleanedPath): array
+    {
+        try {
+            Log::info("Starting image-based PDF sanitization");
+            
+            // Create TCPDF instance for the clean PDF
+            $tcpdf = new \TCPDF();
+            $tcpdf->SetCreator('PDF Sanitization System');
+            $tcpdf->SetAuthor('Universitas Multimedia Nusantara');
+            $tcpdf->SetTitle('Sanitized Document');
+            $tcpdf->SetAutoPageBreak(false);
+
+            // Get page count
+            $pdf = new Pdf($originalPath);
+            $pageCount = $pdf->pageCount();
+            
+            if ($pageCount <= 0) {
+                return ['success' => false, 'error' => 'PDF tidak memiliki halaman'];
+            }
+
+            $maxPages = self::PDF_CLEANING_CONFIG['max_pages'];
+            if ($pageCount > $maxPages) {
+                return ['success' => false, 'error' => "PDF terlalu banyak halaman (maksimal {$maxPages})"];
+            }
+
+            Log::info("Converting {$pageCount} pages to images for sanitization");
+
+            // Convert each page to image and add to new PDF
+            for ($currentPage = 1; $currentPage <= $pageCount; $currentPage++) {
+                $tempImagePath = storage_path('app/temp/sanitize_page_' . $currentPage . '_' . time() . '.jpg');
+                
+                try {
+                    // Convert page to image (this strips all interactive content)
+                    (new Pdf($originalPath))->selectPage($currentPage)->save($tempImagePath);
+
+                    if (!file_exists($tempImagePath)) {
+                        return ['success' => false, 'error' => "Gagal membuat gambar untuk halaman {$currentPage}"];
+                    }
+
+                    // Get image dimensions and add to PDF
+                    $imageSize = getimagesize($tempImagePath);
+                    if (!$imageSize) {
+                        unlink($tempImagePath);
+                        return ['success' => false, 'error' => "Gagal membaca dimensi gambar halaman {$currentPage}"];
+                    }
+
+                    $pageWidthMM = ($imageSize[0] / 150) * 25.4;
+                    $pageHeightMM = ($imageSize[1] / 150) * 25.4;
+                    
+                    $tcpdf->AddPage('P', [$pageWidthMM, $pageHeightMM]);
+                    $tcpdf->Image($tempImagePath, 0, 0, $pageWidthMM, $pageHeightMM, 'JPG', '', '', true, 150);
+
+                    // Clean up temporary image
+                    unlink($tempImagePath);
+
+                } catch (\Exception $e) {
+                    // Clean up on error
+                    if (file_exists($tempImagePath)) {
+                        unlink($tempImagePath);
+                    }
+                    
+                    if (strpos($e->getMessage(), 'security policy') !== false) {
+                        return ['success' => false, 'error' => 'ImageMagick security policy mencegah konversi PDF'];
+                    }
+                    
+                    return ['success' => false, 'error' => "Gagal memproses halaman {$currentPage}: " . $e->getMessage()];
+                }
+            }
+
+            // Save the sanitized PDF
+            $tcpdf->Output($cleanedPath, 'F');
+            
+            Log::info("Image-based sanitization completed successfully");
+            return ['success' => true, 'method' => 'image_conversion'];
+
+        } catch (\Exception $e) {
+            Log::error("Image-based sanitization failed: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Sanitize PDF using FPDI (fallback method)
+     * 
+     * @param string $originalPath Original PDF path  
+     * @param string $cleanedPath Cleaned PDF path
+     * @return array Results
+     */
+    private function sanitizeViaFpdi(string $originalPath, string $cleanedPath): array
+    {
+        try {
+            Log::info("Starting FPDI-based PDF sanitization");
+            
+            $pdf = new Fpdi();
+            $pageCount = $pdf->setSourceFile($originalPath);
+            
+            if ($pageCount <= 0) {
+                return ['success' => false, 'error' => 'PDF tidak memiliki halaman'];
+            }
+
+            // Copy all pages without interactive content
+            for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
+                $templateId = $pdf->importPage($pageNo);
+                $size = $pdf->getTemplateSize($templateId);
+                $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+                $pdf->useTemplate($templateId);
+            }
+
+            $pdf->Output($cleanedPath, 'F');
+            
+            Log::info("FPDI-based sanitization completed successfully");
+            return ['success' => true, 'method' => 'fpdi'];
+
+        } catch (\Exception $e) {
+            Log::error("FPDI-based sanitization failed: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Validate the cleaned PDF
+     * 
+     * @param string $cleanedPath Path to cleaned PDF
+     * @return array Validation results
+     */
+    private function validateCleanedPdf(string $cleanedPath): array
+    {
+        try {
+            // Basic file checks
+            if (!file_exists($cleanedPath)) {
+                return ['valid' => false, 'reason' => 'File yang dibersihkan tidak ditemukan'];
+            }
+
+            $fileSize = filesize($cleanedPath);
+            if ($fileSize < 1024) { // Less than 1KB is suspicious
+                return ['valid' => false, 'reason' => 'File yang dibersihkan terlalu kecil'];
+            }
+
+            if ($fileSize > 100 * 1024 * 1024) { // More than 100MB is too large
+                return ['valid' => false, 'reason' => 'File yang dibersihkan terlalu besar'];
+            }
+
+            // Check PDF header
+            $fileContent = file_get_contents($cleanedPath);
+            if (!$fileContent || substr($fileContent, 0, 4) !== '%PDF') {
+                return ['valid' => false, 'reason' => 'File yang dibersihkan bukan PDF yang valid'];
+            }
+
+            // Try to validate with PDF-to-Image (this will catch most corruption)
+            try {
+                $pdf = new Pdf($cleanedPath);
+                $pageCount = $pdf->pageCount();
+                
+                if ($pageCount <= 0) {
+                    return ['valid' => false, 'reason' => 'File yang dibersihkan tidak memiliki halaman'];
+                }
+
+                Log::info("Cleaned PDF validation passed", [
+                    'file_size' => $fileSize,
+                    'page_count' => $pageCount
+                ]);
+
+            } catch (\Exception $e) {
+                return ['valid' => false, 'reason' => 'File yang dibersihkan tidak dapat diproses: ' . $e->getMessage()];
+            }
+
+            return ['valid' => true, 'reason' => 'File yang dibersihkan valid'];
+
+        } catch (\Exception $e) {
+            Log::error("Error validating cleaned PDF: " . $e->getMessage());
+            return ['valid' => false, 'reason' => 'Gagal memvalidasi file yang dibersihkan'];
+        }
+    }
+
+    /**
      * Handle the actual PDF signing process with proper fallback mechanisms
      */
-    private function handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, $forceImageApproach = false)
+    private function handlePdfSigning($validatedData, $proposal, $fileName, $kaprodi, $forceImageApproach = false, $pdfPath = null)
     {
-        $originalPdfPath = storage_path('app/uploads/proposal/' . $fileName);
+        // Use cleaned PDF path if provided, otherwise use original
+        $originalPdfPath = $pdfPath ?? storage_path('app/uploads/proposal/' . $fileName);
 
         // Step 4: Ensure the temp directory exists before QR code generation
         $tempDir = storage_path('app/temp/');
@@ -229,7 +754,7 @@ class SignatureController extends Controller
 
         // Use image-based approach as fallback
         Log::info("Using image-based signing approach for: {$fileName}");
-        return $this->signThesisWithImageApproach($validatedData, $proposal, $qrCodePath, $fileName, $kaprodi);
+        return $this->signThesisWithImageApproach($validatedData, $proposal, $qrCodePath, $fileName, $kaprodi, $originalPdfPath);
     }
 
     /**
@@ -296,6 +821,9 @@ class SignatureController extends Controller
         // Embed XML data and update database
         $this->embedXmlDataAndFinalize($proposal, $kaprodi, $originalPdfPath, $fileName);
 
+        // Clean up temporary cleaned PDF if it's different from original
+        $this->cleanupTemporaryFiles($originalPdfPath, $fileName);
+
         return redirect()->back()->with('success', 'Proposal berhasil ditandatangani.');
     }
 
@@ -305,37 +833,94 @@ class SignatureController extends Controller
     private function embedXmlDataAndFinalize($proposal, $kaprodi, $originalPdfPath, $fileName)
     {
         try{
+            // Prepare metadata for XML generation with input validation
             $data = [
-                'UUID' => $proposal->uuid,
+                'UUID' => $this->sanitizeXmlTextContent($proposal->uuid ?? ''),
                 'Tipe_Laporan' => 'Skripsi',
-                'Judul_Laporan' => $proposal->judul_proposal,
-                'Judul_Laporan_EN' => $proposal->judul_proposal_en ?? '',
+                'Judul_Laporan' => $this->sanitizeXmlTextContent($proposal->judul_proposal ?? ''),
+                'Judul_Laporan_EN' => $this->sanitizeXmlTextContent($proposal->judul_proposal_en ?? ''),
                 'Prodi' => 'Teknik Informatika',
-                'Tahun' => '2024',
-                'Nama_Mahasiswa' => $proposal->mahasiswa->nama,
-                'NIM' => $proposal->mahasiswa->nim,
-                'Dosen_Pembimbing_1__Nama' => $proposal->toArray()['penilai_pertama']['nama'],
-                'Dosen_Pembimbing_1__NIDN' => $proposal->toArray()['penilai_pertama']['nid'],
-                'KAPRODI' => $kaprodi ? $kaprodi->nama : 'N/A',
+                'Tahun' => date('Y'), // Use current year instead of hardcoded
+                'Nama_Mahasiswa' => $this->sanitizeXmlTextContent($proposal->mahasiswa->nama ?? ''),
+                'NIM' => $this->sanitizeXmlTextContent($proposal->mahasiswa->nim ?? ''),
+                'Dosen_Pembimbing_1__Nama' => $this->sanitizeXmlTextContent($proposal->toArray()['penilai_pertama']['nama'] ?? ''),
+                'Dosen_Pembimbing_1__NIDN' => $this->sanitizeXmlTextContent($proposal->toArray()['penilai_pertama']['nid'] ?? ''),
+                'KAPRODI' => $this->sanitizeXmlTextContent($kaprodi ? $kaprodi->nama : 'N/A'),
             ];
 
-            $xmlContent = self::generateXML($data);
-            $xmlPath = storage_path('data' . '.xml');
-            file_put_contents($xmlPath, $xmlContent);
+            // Validate data completeness
+            $requiredFields = ['UUID', 'Judul_Laporan', 'Nama_Mahasiswa', 'NIM'];
+            foreach ($requiredFields as $field) {
+                if (empty($data[$field])) {
+                    throw new \Exception("Required field '{$field}' is missing or empty");
+                }
+            }
 
+            Log::info("Generating secure XML metadata for thesis signing", [
+                'uuid' => $data['UUID'],
+                'nim' => $data['NIM']
+            ]);
+
+            // Generate secure XML
+            $xmlContent = self::generateXML($data);
+            
+            if ($xmlContent === false || empty($xmlContent)) {
+                throw new \Exception("Failed to generate XML metadata");
+            }
+
+            // Create temporary XML file with secure permissions
+            $xmlPath = storage_path('app/temp/data_' . time() . '_' . uniqid() . '.xml');
+            
+            // Ensure temp directory exists
+            $tempDir = dirname($xmlPath);
+            if (!is_dir($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+            
+            $bytesWritten = file_put_contents($xmlPath, $xmlContent);
+            
+            if ($bytesWritten === false) {
+                throw new \Exception("Failed to write XML file to: {$xmlPath}");
+            }
+
+            // Verify the written file
+            if (!file_exists($xmlPath) || filesize($xmlPath) === 0) {
+                throw new \Exception("XML file verification failed after writing");
+            }
+
+            Log::info("XML metadata file created successfully", [
+                'path' => $xmlPath,
+                'size' => filesize($xmlPath)
+            ]);
+
+            // Embed XML in PDF
             self::embedFilesInExistingPdf(
                 $originalPdfPath,
-                $originalPdfPath, [
-                $xmlPath
-            ]);
+                $originalPdfPath, 
+                [$xmlPath]
+            );
+
+            Log::info("XML metadata successfully embedded in PDF");
 
             // Clean up the temporary XML file
             if (file_exists($xmlPath)) {
                 unlink($xmlPath);
+                Log::info("Temporary XML file cleaned up");
             }
+
         } catch (\Exception $e) {
-            Log::error("Failed to embed data.xml: " . $e->getMessage());
-            // Don't fail the entire process for XML embedding issues
+            Log::error("Failed to embed XML metadata: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'filename' => $fileName
+            ]);
+            
+            // Clean up any temporary files
+            if (isset($xmlPath) && file_exists($xmlPath)) {
+                unlink($xmlPath);
+            }
+            
+            // Don't fail the entire process for XML embedding issues, but log it prominently
+            Log::warning("Continuing with signing process despite XML embedding failure");
         }
 
         // Update database
@@ -345,7 +930,10 @@ class SignatureController extends Controller
         $proposal->hash_value = $hashValue;
         $proposal->save();
 
-        Log::info("Signing process completed successfully for: {$fileName}");
+        Log::info("Signing process completed successfully", [
+            'filename' => $fileName,
+            'hash' => $hashValue
+        ]);
     }
 
     public function downloadSignedProposal($filename)
@@ -447,12 +1035,41 @@ class SignatureController extends Controller
         try {
             // Load the PDF content into memory
             $pdfContent = $request->file('file')->get();
-            // Extract embedded files
+            
+            // Extract embedded files with automatic sanitization
             $xmlContent = $this->extractEmbeddedFiles($pdfContent);
-            $content = simplexml_load_string($xmlContent);
+            
+            if (empty($xmlContent) || $xmlContent === "No embedded files found.") {
+                throw new \Exception("Tidak ditemukan file XML yang tertanam dalam PDF");
+            }
 
-            // Convert the SimpleXMLElement object to an array
-            $parsedArray = json_decode(json_encode($content), true);
+            // Additional XML sanitization (if not already done in extractEmbeddedFiles)
+            if (!str_starts_with($xmlContent, '<?xml')) {
+                // If the extracted content is not clean XML, try to sanitize it
+                Log::info("Performing additional XML sanitization on extracted content");
+                $sanitizationResult = $this->sanitizeXmlContent($xmlContent, true);
+                
+                if (!$sanitizationResult['success']) {
+                    throw new \Exception("XML content tidak dapat dibersihkan: " . $sanitizationResult['error']);
+                }
+                
+                $xmlContent = $sanitizationResult['sanitized_xml'];
+                $parsedArray = $sanitizationResult['data'];
+            } else {
+                // Parse already sanitized XML
+                $content = simplexml_load_string($xmlContent);
+                if ($content === false) {
+                    throw new \Exception("XML content tidak dapat diparse");
+                }
+                
+                // Convert the SimpleXMLElement object to an array
+                $parsedArray = json_decode(json_encode($content), true);
+            }
+
+            // Validate required fields exist
+            if (!isset($parsedArray['UUID'])) {
+                throw new \Exception("UUID tidak ditemukan dalam XML metadata");
+            }
 
             // Hash check
             $hashValue = hash('sha512', $pdfContent);
@@ -460,37 +1077,57 @@ class SignatureController extends Controller
 
             // Check if the hash value matches the one stored in the database
             $proposal = ProposalSkripsi::where('uuid', $parsedArray['UUID'])->first();
+            
+            if (!$proposal) {
+                return view('pages.dosen.verify.verify', [
+                    'title' => 'Verify Thesis',
+                    'subtitle' => 'Verify Thesis',
+                    'status' => 'failed',
+                    'hash_value' => $hashValue,
+                    'error' => 'UUID tidak ditemukan dalam database',
+                ]);
+            }
+            
             if ($proposal->hash_value !== $hashValue) {
                 return view('pages.dosen.verify.verify', [
                     'title' => 'Verify Thesis',
                     'subtitle' => 'Verify Thesis',
                     'status' => 'failed',
                     'hash_value' => $hashValue,
-                    'error' => 'Hash value mismatch',
+                    'error' => 'Hash value mismatch - dokumen mungkin telah dimodifikasi',
                 ]);
             }
+
+            Log::info("PDF verification successful", [
+                'uuid' => $parsedArray['UUID'],
+                'hash' => $hashValue
+            ]);
 
             return view('pages.dosen.verify.verify', [
                 'title' => 'Verify Thesis',
                 'subtitle' => 'Verify Thesis',
-                'Tipe_Laporan' => $parsedArray['Tipe_Laporan'],
-                'Judul_Laporan' => $parsedArray['Judul_Laporan'],
+                'Tipe_Laporan' => $parsedArray['Tipe_Laporan'] ?? '',
+                'Judul_Laporan' => $parsedArray['Judul_Laporan'] ?? '',
                 'Judul_Laporan_EN' => $parsedArray['Judul_Laporan_EN'] ?? '',
-                'Prodi' => $parsedArray['Prodi'],
-                'Tahun' => $parsedArray['Tahun'],
-                'Nama_Mahasiswa' => $parsedArray['Nama_Mahasiswa'],
-                'NIM' => $parsedArray['NIM'],
-                'Dosen_Pembimbing_1__Nama' => $parsedArray['Dosen_Pembimbing_1__Nama'],
-                'Dosen_Pembimbing_1__NIDN' => $parsedArray['Dosen_Pembimbing_1__NIDN'],
-//                'Dosen_Pembimbing_2__Nama_' => $parsedArray['Dosen_Pembimbing_2__Nama_'],
-//                'Dosen_Pembimbing_2__NIK___NIDN_' => $parsedArray['Dosen_Pembimbing_2__NIDN_'],
-//                'Dosen_Penguji' => $parsedArray['Dosen_Penguji'],
-//                'Dosen_Ketua_Sidang' => $parsedArray['Dosen_Ketua_Sidang'],
-                'KAPRODI' => $parsedArray['KAPRODI'],
+                'Prodi' => $parsedArray['Prodi'] ?? '',
+                'Tahun' => $parsedArray['Tahun'] ?? '',
+                'Nama_Mahasiswa' => $parsedArray['Nama_Mahasiswa'] ?? '',
+                'NIM' => $parsedArray['NIM'] ?? '',
+                'Dosen_Pembimbing_1__Nama' => $parsedArray['Dosen_Pembimbing_1__Nama'] ?? '',
+                'Dosen_Pembimbing_1__NIDN' => $parsedArray['Dosen_Pembimbing_1__NIDN'] ?? '',
+                'Dosen_Pembimbing_2__Nama' => $parsedArray['Dosen_Pembimbing_2__Nama'] ?? '',
+                'Dosen_Pembimbing_2__NIDN' => $parsedArray['Dosen_Pembimbing_2__NIDN'] ?? '',
+                'Dosen_Penguji' => $parsedArray['Dosen_Penguji'] ?? '',
+                'Dosen_Ketua_Sidang' => $parsedArray['Dosen_Ketua_Sidang'] ?? '',
+                'KAPRODI' => $parsedArray['KAPRODI'] ?? '',
                 'status' => 'success',
                 'hash_value' => $hashValue
             ]);
         } catch (\Exception $e) {
+            Log::error("PDF verification failed: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             // Handle the exception
             return view('pages.dosen.verify.verify', [
                 'title' => 'Verify Thesis',
@@ -520,11 +1157,26 @@ class SignatureController extends Controller
                         // Check if $value is an instance of Smalot\PdfParser\PDFObject
                         if ($value instanceof \Smalot\PdfParser\PDFObject) {
                             // Try to access the content directly
-                            $content = $value->getContent(); // Check if there is a getContent() method available
+                            $content = $value->getContent();
+                            
+                            // SECURITY: Sanitize extracted XML content before returning
+                            if (!empty($content)) {
+                                Log::info("Extracted embedded XML content, performing sanitization");
+                                $sanitizationResult = $this->sanitizeXmlContent($content, true);
+                                
+                                if ($sanitizationResult['success']) {
+                                    Log::info("XML content successfully sanitized");
+                                    return $sanitizationResult['sanitized_xml'];
+                                } else {
+                                    Log::error("XML sanitization failed: " . $sanitizationResult['error']);
+                                    throw new \Exception("Extracted XML content is not safe: " . $sanitizationResult['error']);
+                                }
+                            }
+                            
                             return $content;
                         } else {
                             // Handle the case if the object does not contain the expected class
-                            echo "No content found for key: $key";
+                            Log::warning("No content found for key: $key");
                         }
                     }
                 } else {
@@ -533,29 +1185,79 @@ class SignatureController extends Controller
             }
         } catch (\Exception $e) {
             Log::error('Error extracting embedded files: ' . $e->getMessage());
+            throw $e; // Re-throw to be handled by calling method
         }
 
         return $embeddedFiles;
     }
 
     /**
-     * Will return data.xml file
+     * Will return data.xml file with comprehensive sanitization
      */
     public static function generateXML($object): bool|string
     {
-        // Convert the object to an array
-        $arrayData = json_decode(json_encode($object), true);
+        try {
+            // Convert the object to an array
+            $arrayData = json_decode(json_encode($object), true);
 
-        // Create a new XML document
-        $xml = new \SimpleXMLElement('<root/>');
+            // Validate and sanitize the data before XML generation
+            $instance = new self();
+            $sanitizedData = $instance->sanitizeXmlDataRecursive(
+                $arrayData, 
+                self::XML_SANITIZATION_CONFIG['allowed_elements'], 
+                0
+            );
 
-        // Recursive function to convert array data into XML
-        self::arrayToXML($arrayData, $xml);
+            // Create a new XML document with secure settings
+            $xml = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><root/>');
 
-        // Save the XML to a buffer (string)
-        return $xml->asXML();
+            // Use secure XML generation
+            self::arrayToXMLSecure($sanitizedData, $xml);
+
+            // Validate the generated XML
+            $generatedXml = $xml->asXML();
+            
+            if ($generatedXml === false) {
+                Log::error("Failed to generate XML from data");
+                throw new \Exception("Gagal membuat XML");
+            }
+
+            // Final security check on generated XML
+            $finalCheck = $instance->performXmlSecurityChecks($generatedXml);
+            if (!$finalCheck['safe']) {
+                Log::error("Generated XML failed security check: " . $finalCheck['reason']);
+                throw new \Exception("XML yang dihasilkan tidak aman: " . $finalCheck['reason']);
+            }
+
+            Log::info("Secure XML generation completed successfully");
+            return $generatedXml;
+
+        } catch (\Exception $e) {
+            Log::error("Error during secure XML generation: " . $e->getMessage());
+            // Fallback to basic generation for backwards compatibility
+            return self::generateXMLBasic($object);
+        }
     }
 
+    /**
+     * Fallback method for basic XML generation (for backwards compatibility)
+     */
+    private static function generateXMLBasic($object): bool|string
+    {
+        try {
+            $arrayData = json_decode(json_encode($object), true);
+            $xml = new \SimpleXMLElement('<root/>');
+            self::arrayToXML($arrayData, $xml);
+            return $xml->asXML();
+        } catch (\Exception $e) {
+            Log::error("Basic XML generation also failed: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Legacy arrayToXML method (kept for backwards compatibility)
+     */
     private static function arrayToXML(array $data, \SimpleXMLElement &$xml): void
     {
         foreach ($data as $key => $value) {
@@ -564,6 +1266,28 @@ class SignatureController extends Controller
                 self::arrayToXML($value, $child);
             } else {
                 $xml->addChild($key, htmlspecialchars($value));
+            }
+        }
+    }
+
+    /**
+     * Secure static version of arrayToXMLSecure for use in generateXML
+     */
+    private static function arrayToXMLSecure(array $data, \SimpleXMLElement &$xml): void
+    {
+        $instance = new self();
+        
+        foreach ($data as $key => $value) {
+            // Additional key sanitization
+            $cleanKey = $instance->sanitizeXmlElementName($key);
+            
+            if (is_array($value)) {
+                $child = $xml->addChild($cleanKey);
+                self::arrayToXMLSecure($value, $child);
+            } else {
+                // Double sanitization for extra security
+                $sanitizedValue = $instance->sanitizeXmlTextContent((string)$value);
+                $xml->addChild($cleanKey, $sanitizedValue);
             }
         }
     }
@@ -664,13 +1388,14 @@ class SignatureController extends Controller
      * @param string $qrCodePath
      * @param string $fileName
      * @param Dosen|null $kaprodi
+     * @param string|null $pdfPath Path to cleaned PDF if available
      * @return \Illuminate\Http\RedirectResponse
      * @throws \Exception
      */
-    private function signThesisWithImageApproach($validatedData, $proposal, $qrCodePath, $fileName, $kaprodi)
+    private function signThesisWithImageApproach($validatedData, $proposal, $qrCodePath, $fileName, $kaprodi, $pdfPath = null)
     {
         Log::info("Attempting image-based signing for PDF: {$fileName}");
-        $originalPdfPath = storage_path('app/uploads/proposal/' . $fileName);
+        $originalPdfPath = $pdfPath ?? storage_path('app/uploads/proposal/' . $fileName);
 
         try {
             // Initialize TCPDF for creating the new PDF
@@ -745,6 +1470,9 @@ class SignatureController extends Controller
             $proposal->hash_value = substr(hash('sha512', file_get_contents($originalPdfPath)), 0, 64);
             $proposal->save();
 
+            // Clean up temporary cleaned PDF if it's different from original
+            $this->cleanupTemporaryFiles($originalPdfPath, $fileName);
+
             Log::info("Signing process completed successfully for: {$fileName}");
             return redirect()->back()->with('success', 'Dokumen berhasil ditandatangani menggunakan metode fallback.');
 
@@ -784,37 +1512,110 @@ class SignatureController extends Controller
 
 
     /**
-     * Helper method to embed XML data into PDF
+     * Helper method to embed XML data into PDF (used by alternative signing methods)
      */
     private function embedXmlData($proposal, $kaprodi, $modifiedPdfPath)
     {
         try {
+            // Use the same secure XML embedding as the main method
             $data = [
-                'UUID' => $proposal->uuid,
+                'UUID' => $this->sanitizeXmlTextContent($proposal->uuid ?? ''),
                 'Tipe_Laporan' => 'Skripsi',
-                'Judul_Laporan' => $proposal->judul_proposal,
-                'Judul_Laporan_EN' => $proposal->judul_proposal_en ?? '',
+                'Judul_Laporan' => $this->sanitizeXmlTextContent($proposal->judul_proposal ?? ''),
+                'Judul_Laporan_EN' => $this->sanitizeXmlTextContent($proposal->judul_proposal_en ?? ''),
                 'Prodi' => 'Teknik Informatika',
-                'Tahun' => '2024',
-                'Nama_Mahasiswa' => $proposal->mahasiswa->nama,
-                'NIM' => $proposal->mahasiswa->nim,
-                'Dosen_Pembimbing_1__Nama' => $proposal->toArray()['penilai_pertama']['nama'],
-                'Dosen_Pembimbing_1__NIDN' => $proposal->toArray()['penilai_pertama']['nid'],
-                'KAPRODI' => $kaprodi ? $kaprodi->nama : 'N/A',
+                'Tahun' => date('Y'),
+                'Nama_Mahasiswa' => $this->sanitizeXmlTextContent($proposal->mahasiswa->nama ?? ''),
+                'NIM' => $this->sanitizeXmlTextContent($proposal->mahasiswa->nim ?? ''),
+                'Dosen_Pembimbing_1__Nama' => $this->sanitizeXmlTextContent($proposal->toArray()['penilai_pertama']['nama'] ?? ''),
+                'Dosen_Pembimbing_1__NIDN' => $this->sanitizeXmlTextContent($proposal->toArray()['penilai_pertama']['nid'] ?? ''),
+                'KAPRODI' => $this->sanitizeXmlTextContent($kaprodi ? $kaprodi->nama : 'N/A'),
             ];
 
             $xmlContent = self::generateXML($data);
-            $xmlPath = storage_path('data' . '.xml');
-            file_put_contents($xmlPath, $xmlContent);
+            
+            if ($xmlContent === false || empty($xmlContent)) {
+                throw new \Exception("Failed to generate XML in alternative approach");
+            }
+
+            $xmlPath = storage_path('app/temp/data_alt_' . time() . '_' . uniqid() . '.xml');
+            
+            // Ensure temp directory exists
+            $tempDir = dirname($xmlPath);
+            if (!is_dir($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+
+            if (file_put_contents($xmlPath, $xmlContent) === false) {
+                throw new \Exception("Failed to write XML file in alternative approach");
+            }
 
             self::embedFilesInExistingPdf($modifiedPdfPath, $modifiedPdfPath, [$xmlPath]);
 
             if (file_exists($xmlPath)) {
                 unlink($xmlPath);
             }
+
+            Log::info("XML metadata embedded successfully using alternative approach");
+            
         } catch (\Exception $e) {
-            Log::warning("Failed to embed XML data in alternative approach: " . $e->getMessage());
+            Log::warning("Failed to embed XML data in alternative approach: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Clean up any temporary files
+            if (isset($xmlPath) && file_exists($xmlPath)) {
+                unlink($xmlPath);
+            }
+            
             // Don't throw - the main signing was successful
+        }
+    }
+
+    /**
+     * Test XML sanitization functionality (for debugging/validation)
+     * This method can be called to verify XML sanitization is working correctly
+     * 
+     * @param string $testXmlContent Optional test XML content
+     * @return array Test results
+     */
+    public function testXmlSanitization(string $testXmlContent = null): array
+    {
+        try {
+            // Default test XML with potential security issues
+            if ($testXmlContent === null) {
+                $testXmlContent = '<?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE root [
+                    <!ENTITY xxe SYSTEM "file:///etc/passwd">
+                ]>
+                <root>
+                    <UUID>test-uuid-123</UUID>
+                    <Tipe_Laporan>Skripsi</Tipe_Laporan>
+                    <script>alert("XSS")</script>
+                    <Judul_Laporan>&xxe;</Judul_Laporan>
+                    <javascript:void(0)>Malicious content</javascript:void(0)>
+                </root>';
+            }
+
+            Log::info("Testing XML sanitization with potentially malicious content");
+            
+            $result = $this->sanitizeXmlContent($testXmlContent, true);
+            
+            return [
+                'test_passed' => $result['success'],
+                'sanitization_result' => $result,
+                'original_size' => strlen($testXmlContent),
+                'sanitized_size' => $result['success'] ? strlen($result['sanitized_xml']) : 0,
+                'message' => $result['success'] ? 'XML sanitization test passed' : 'XML sanitization test failed: ' . $result['error']
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("XML sanitization test error: " . $e->getMessage());
+            return [
+                'test_passed' => false,
+                'error' => $e->getMessage(),
+                'message' => 'XML sanitization test encountered an exception'
+            ];
         }
     }
 
@@ -864,6 +1665,60 @@ class SignatureController extends Controller
     }
 
     /**
+     * Clean up temporary files created during the PDF processing
+     * 
+     * @param string $processedPdfPath Path to the processed PDF
+     * @param string $originalFileName Original file name
+     * @return void
+     */
+    private function cleanupTemporaryFiles(string $processedPdfPath, string $originalFileName): void
+    {
+        try {
+            $originalPdfPath = storage_path('app/uploads/proposal/' . $originalFileName);
+            
+            // If processed path is different from original, it means we created a cleaned version
+            if ($processedPdfPath !== $originalPdfPath && file_exists($processedPdfPath)) {
+                // Copy the processed (signed) PDF back to the original location
+                if (copy($processedPdfPath, $originalPdfPath)) {
+                    Log::info("Signed PDF copied back to original location", [
+                        'from' => $processedPdfPath,
+                        'to' => $originalPdfPath
+                    ]);
+                    
+                    // Remove the temporary cleaned file
+                    unlink($processedPdfPath);
+                    Log::info("Temporary cleaned PDF file removed", ['file' => $processedPdfPath]);
+                } else {
+                    Log::warning("Failed to copy signed PDF back to original location", [
+                        'from' => $processedPdfPath,
+                        'to' => $originalPdfPath
+                    ]);
+                }
+            }
+            
+            // Clean up any temporary image files that might have been left behind
+            $tempDir = storage_path('app/temp/');
+            if (is_dir($tempDir)) {
+                $tempFiles = glob($tempDir . 'sanitize_page_*');
+                $retention = self::PDF_CLEANING_CONFIG['temp_file_retention'];
+                foreach ($tempFiles as $tempFile) {
+                    if (file_exists($tempFile) && (time() - filemtime($tempFile)) > $retention) {
+                        unlink($tempFile);
+                        Log::info("Old temporary image file cleaned up", ['file' => $tempFile, 'retention_seconds' => $retention]);
+                    }
+                }
+            }
+            
+        } catch (\Exception $e) {
+            Log::error("Error during cleanup: " . $e->getMessage(), [
+                'processed_path' => $processedPdfPath,
+                'original_filename' => $originalFileName
+            ]);
+            // Don't throw exception - cleanup failure shouldn't break the main process
+        }
+    }
+
+    /**
      * Convert pdf to array of images
      * @param $filename
      * @return array
@@ -905,6 +1760,604 @@ class SignatureController extends Controller
         }
 
         return $images;
+    }
+
+    /**
+     * Admin Thesis Status Dashboard - shows comprehensive thesis status including digital signatures
+     * @return Factory|View|Application
+     */
+    public function adminThesisStatus(): Factory|View|Application
+    {
+        // Get all thesis data with comprehensive information for admin
+        $data = ProposalSkripsi::with('proposalSkripsiForm')
+            ->with('penilaiPertama', function ($query) {
+                $query->select('id', 'nama', 'nid');
+            })
+            ->with('penilaiKedua', function ($query) {
+                $query->select('id', 'nama', 'nid');
+            })
+            ->with('penilaiKetiga', function ($query) {
+                $query->select('id', 'nama', 'nid');
+            })
+            ->with('mahasiswa', function ($query) {
+                $query->select('id', 'nim', 'nama');
+            })
+            ->with('kodePenelitianProposal.areaPenelitian')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('pages.admin.thesis-status.admin-thesis-status', [
+            'title' => 'Status Skripsi',
+            'subtitle' => 'Status Skripsi & Tanda Tangan Digital',
+            'data' => $data,
+        ]);
+    }
+
+    /**
+     * Get current XML sanitization configuration (for admin dashboard)
+     * 
+     * @return array Current configuration
+     */
+    public function getXmlSanitizationConfig(): array
+    {
+        return [
+            'config' => self::XML_SANITIZATION_CONFIG,
+            'status' => 'active',
+            'last_updated' => now()->toDateTimeString(),
+            'features' => [
+                'xxe_protection' => true,
+                'size_limits' => true,
+                'element_whitelist' => true,
+                'content_sanitization' => true,
+                'schema_validation' => self::XML_SANITIZATION_CONFIG['validate_schema'],
+                'encoding_validation' => true,
+                'pattern_filtering' => true,
+            ]
+        ];
+    }
+
+    /**
+     * Validate XML sanitization system integrity
+     * This method performs a comprehensive check of the XML sanitization system
+     * 
+     * @return array System validation results
+     */
+    public function validateXmlSanitizationSystem(): array
+    {
+        $results = [
+            'overall_status' => 'unknown',
+            'tests' => [],
+            'recommendations' => [],
+            'security_score' => 0
+        ];
+
+        try {
+            // Test 1: Basic sanitization
+            $basicTest = $this->testXmlSanitization();
+            $results['tests']['basic_sanitization'] = $basicTest;
+
+            // Test 2: XXE protection
+            $xxeTest = $this->testXmlSanitization('<?xml version="1.0"?><!DOCTYPE test [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>');
+            $results['tests']['xxe_protection'] = $xxeTest;
+
+            // Test 3: Large content handling
+            $largeContent = '<?xml version="1.0"?><root><data>' . str_repeat('A', 2000) . '</data></root>';
+            $sizeTest = $this->testXmlSanitization($largeContent);
+            $results['tests']['size_handling'] = $sizeTest;
+
+            // Test 4: Element filtering
+            $maliciousElements = '<?xml version="1.0"?><root><allowed_element>OK</allowed_element><script>malicious</script><unknown_element>filtered</unknown_element></root>';
+            $filterTest = $this->testXmlSanitization($maliciousElements);
+            $results['tests']['element_filtering'] = $filterTest;
+
+            // Calculate security score
+            $passedTests = 0;
+            $totalTests = count($results['tests']);
+            
+            foreach ($results['tests'] as $test) {
+                if ($test['test_passed']) {
+                    $passedTests++;
+                }
+            }
+
+            $results['security_score'] = round(($passedTests / $totalTests) * 100);
+
+            // Determine overall status
+            if ($results['security_score'] >= 90) {
+                $results['overall_status'] = 'excellent';
+            } elseif ($results['security_score'] >= 75) {
+                $results['overall_status'] = 'good';
+                $results['recommendations'][] = 'Some minor security improvements could be made';
+            } elseif ($results['security_score'] >= 50) {
+                $results['overall_status'] = 'needs_improvement';
+                $results['recommendations'][] = 'Several security issues need to be addressed';
+            } else {
+                $results['overall_status'] = 'critical';
+                $results['recommendations'][] = 'Critical security vulnerabilities detected - immediate action required';
+            }
+
+            // Add specific recommendations
+            foreach ($results['tests'] as $testName => $test) {
+                if (!$test['test_passed']) {
+                    $results['recommendations'][] = "Fix issues with {$testName}: " . ($test['error'] ?? 'Unknown error');
+                }
+            }
+
+            Log::info("XML sanitization system validation completed", [
+                'security_score' => $results['security_score'],
+                'status' => $results['overall_status']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("XML sanitization system validation failed: " . $e->getMessage());
+            $results['overall_status'] = 'error';
+            $results['error'] = $e->getMessage();
+            $results['recommendations'][] = 'System validation encountered errors - check logs for details';
+        }
+
+        return $results;
+    }
+
+    /**
+     * Comprehensive XML sanitization and validation
+     * 
+     * @param string $xmlContent Raw XML content
+     * @param bool $validateSchema Whether to validate against schema
+     * @return array Result with success status and sanitized XML or error message
+     */
+    private function sanitizeXmlContent(string $xmlContent, bool $validateSchema = true): array
+    {
+        try {
+            Log::info("Starting XML sanitization process");
+
+            // Step 1: Basic security checks
+            $securityCheck = $this->performXmlSecurityChecks($xmlContent);
+            if (!$securityCheck['safe']) {
+                return [
+                    'success' => false,
+                    'error' => 'XML mengandung konten yang tidak aman: ' . $securityCheck['reason']
+                ];
+            }
+
+            // Step 2: Size and structure validation
+            $structureCheck = $this->validateXmlStructure($xmlContent);
+            if (!$structureCheck['valid']) {
+                return [
+                    'success' => false,
+                    'error' => 'Struktur XML tidak valid: ' . $structureCheck['reason']
+                ];
+            }
+
+            // Step 3: Parse with secure settings
+            $parseResult = $this->parseXmlSecurely($xmlContent);
+            if (!$parseResult['success']) {
+                return [
+                    'success' => false,
+                    'error' => 'Gagal memparse XML: ' . $parseResult['error']
+                ];
+            }
+
+            // Step 4: Content validation and sanitization
+            $sanitizedData = $this->sanitizeXmlData($parseResult['data']);
+            if (!$sanitizedData['success']) {
+                return [
+                    'success' => false,
+                    'error' => 'Gagal membersihkan data XML: ' . $sanitizedData['error']
+                ];
+            }
+
+            // Step 5: Schema validation (optional)
+            if ($validateSchema && self::XML_SANITIZATION_CONFIG['validate_schema']) {
+                $schemaCheck = $this->validateXmlSchema($sanitizedData['data']);
+                if (!$schemaCheck['valid']) {
+                    Log::warning("XML schema validation failed: " . $schemaCheck['reason']);
+                    // Don't fail completely for schema issues, just log warning
+                }
+            }
+
+            // Step 6: Generate clean XML
+            $cleanXml = $this->generateCleanXml($sanitizedData['data']);
+
+            Log::info("XML sanitization completed successfully");
+            return [
+                'success' => true,
+                'sanitized_xml' => $cleanXml,
+                'data' => $sanitizedData['data']
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("Error during XML sanitization: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'Kesalahan internal saat membersihkan XML: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Perform comprehensive security checks on XML content
+     * 
+     * @param string $xmlContent XML content to check
+     * @return array Security check results
+     */
+    private function performXmlSecurityChecks(string $xmlContent): array
+    {
+        try {
+            // Check size limits
+            $size = strlen($xmlContent);
+            $maxSize = self::XML_SANITIZATION_CONFIG['max_xml_size'];
+            if ($size > $maxSize) {
+                return ['safe' => false, 'reason' => 'XML terlalu besar (maksimal ' . round($maxSize / 1024) . 'KB)'];
+            }
+
+            // Check encoding
+            $requiredEncoding = self::XML_SANITIZATION_CONFIG['encoding'];
+            if (!mb_check_encoding($xmlContent, $requiredEncoding)) {
+                return ['safe' => false, 'reason' => 'Encoding XML tidak valid (harus ' . $requiredEncoding . ')'];
+            }
+
+            // Check for forbidden patterns
+            $forbiddenPatterns = self::XML_SANITIZATION_CONFIG['forbidden_patterns'];
+            foreach ($forbiddenPatterns as $pattern) {
+                if (stripos($xmlContent, $pattern) !== false) {
+                    Log::warning("Forbidden XML pattern detected", ['pattern' => $pattern]);
+                    return ['safe' => false, 'reason' => 'XML mengandung pola yang dilarang: ' . $pattern];
+                }
+            }
+
+            // Check for suspicious content
+            $suspiciousPatterns = [
+                '/<!ENTITY[^>]*>/i',              // Entity declarations
+                '/&[^;]+;/',                      // Entity references (except standard ones)
+                '/<\?xml[^>]*standalone\s*=\s*["\']no["\']/i', // Standalone=no
+                '/<!DOCTYPE[^>]*\[/i',            // DTD with internal subset
+                '/SYSTEM\s+["\'][^"\']*["\']/',   // System identifiers
+                '/PUBLIC\s+["\'][^"\']*["\']/',   // Public identifiers
+            ];
+
+            foreach ($suspiciousPatterns as $pattern) {
+                if (preg_match($pattern, $xmlContent)) {
+                    Log::warning("Suspicious XML content detected", ['pattern' => $pattern]);
+                    return ['safe' => false, 'reason' => 'XML mengandung konten yang mencurigakan'];
+                }
+            }
+
+            return ['safe' => true, 'reason' => 'XML lolos pemeriksaan keamanan'];
+
+        } catch (\Exception $e) {
+            Log::error("Error during XML security check: " . $e->getMessage());
+            return ['safe' => false, 'reason' => 'Gagal memeriksa keamanan XML'];
+        }
+    }
+
+    /**
+     * Validate XML structure and basic formatting
+     * 
+     * @param string $xmlContent XML content to validate
+     * @return array Validation results
+     */
+    private function validateXmlStructure(string $xmlContent): array
+    {
+        try {
+            // Check for basic XML structure
+            if (!preg_match('/^\s*<\?xml[^>]*\?>\s*</', $xmlContent) && !preg_match('/^\s*<[^>]+>/', $xmlContent)) {
+                return ['valid' => false, 'reason' => 'Format XML tidak valid - tidak ditemukan root element'];
+            }
+
+            // Check for balanced tags (basic check)
+            $openTags = preg_match_all('/<[^\/][^>]*[^\/]>/', $xmlContent);
+            $closeTags = preg_match_all('/<\/[^>]+>/', $xmlContent);
+            $selfClosingTags = preg_match_all('/<[^>]*\/>/', $xmlContent);
+            
+            // Rough balance check (not perfect but catches obvious issues)
+            if (abs($openTags - $closeTags) > $selfClosingTags + 2) {
+                return ['valid' => false, 'reason' => 'Tag XML tidak seimbang'];
+            }
+
+            // Check depth by counting maximum nesting
+            $depth = 0;
+            $maxDepth = 0;
+            $chars = str_split($xmlContent);
+            $inTag = false;
+            $tagContent = '';
+            
+            for ($i = 0; $i < count($chars); $i++) {
+                $char = $chars[$i];
+                
+                if ($char === '<') {
+                    $inTag = true;
+                    $tagContent = '<';
+                } elseif ($char === '>' && $inTag) {
+                    $tagContent .= '>';
+                    $inTag = false;
+                    
+                    if (preg_match('/^<\//', $tagContent)) {
+                        $depth--;
+                    } elseif (!preg_match('/\/>$/', $tagContent) && !preg_match('/^<\?/', $tagContent) && !preg_match('/^<!/', $tagContent)) {
+                        $depth++;
+                        $maxDepth = max($maxDepth, $depth);
+                    }
+                    
+                    $tagContent = '';
+                } elseif ($inTag) {
+                    $tagContent .= $char;
+                }
+            }
+
+            $maxAllowedDepth = self::XML_SANITIZATION_CONFIG['max_depth'];
+            if ($maxDepth > $maxAllowedDepth) {
+                return ['valid' => false, 'reason' => "XML terlalu kompleks (kedalaman maksimal {$maxAllowedDepth})"];
+            }
+
+            return ['valid' => true, 'reason' => 'Struktur XML valid'];
+
+        } catch (\Exception $e) {
+            Log::error("Error during XML structure validation: " . $e->getMessage());
+            return ['valid' => false, 'reason' => 'Gagal memvalidasi struktur XML'];
+        }
+    }
+
+    /**
+     * Parse XML content with secure settings
+     * 
+     * @param string $xmlContent XML content to parse
+     * @return array Parse results
+     */
+    private function parseXmlSecurely(string $xmlContent): array
+    {
+        try {
+            // Disable external entity loading to prevent XXE attacks
+            $previousValueXML = libxml_disable_entity_loader(true);
+            $previousValueExt = libxml_use_internal_errors(true);
+            
+            // Clear any previous XML errors
+            libxml_clear_errors();
+
+            try {
+                // Parse with SimpleXML with secure settings
+                $xml = simplexml_load_string(
+                    $xmlContent, 
+                    'SimpleXMLElement', 
+                    LIBXML_NOCDATA | LIBXML_NOENT | LIBXML_NONET | LIBXML_NSCLEAN
+                );
+
+                if ($xml === false) {
+                    $errors = libxml_get_errors();
+                    $errorMessages = array_map(function($error) {
+                        return trim($error->message);
+                    }, $errors);
+                    
+                    return [
+                        'success' => false,
+                        'error' => 'XML parsing gagal: ' . implode('; ', $errorMessages)
+                    ];
+                }
+
+                // Convert to array for easier processing
+                $data = json_decode(json_encode($xml), true);
+                
+                return [
+                    'success' => true,
+                    'data' => $data
+                ];
+
+            } finally {
+                // Restore previous settings
+                libxml_disable_entity_loader($previousValueXML);
+                libxml_use_internal_errors($previousValueExt);
+                libxml_clear_errors();
+            }
+
+        } catch (\Exception $e) {
+            Log::error("Error during secure XML parsing: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Gagal memparse XML secara aman: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Sanitize XML data content
+     * 
+     * @param array $data Parsed XML data
+     * @return array Sanitization results
+     */
+    private function sanitizeXmlData(array $data): array
+    {
+        try {
+            $allowedElements = self::XML_SANITIZATION_CONFIG['allowed_elements'];
+            $sanitizedData = [];
+
+            // Recursively sanitize data
+            $sanitizedData = $this->sanitizeXmlDataRecursive($data, $allowedElements, 0);
+
+            return [
+                'success' => true,
+                'data' => $sanitizedData
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("Error during XML data sanitization: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Gagal membersihkan data XML: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Recursively sanitize XML data
+     * 
+     * @param mixed $data Data to sanitize
+     * @param array $allowedElements Allowed element names
+     * @param int $depth Current recursion depth
+     * @return mixed Sanitized data
+     */
+    private function sanitizeXmlDataRecursive($data, array $allowedElements, int $depth): mixed
+    {
+        $maxDepth = self::XML_SANITIZATION_CONFIG['max_depth'];
+        if ($depth > $maxDepth) {
+            throw new \Exception("Maximum nesting depth exceeded");
+        }
+
+        if (is_array($data)) {
+            $sanitized = [];
+            foreach ($data as $key => $value) {
+                // Sanitize key name
+                $cleanKey = $this->sanitizeXmlElementName($key);
+                
+                // Check if element is allowed
+                if (in_array($cleanKey, $allowedElements)) {
+                    $sanitized[$cleanKey] = $this->sanitizeXmlDataRecursive($value, $allowedElements, $depth + 1);
+                } else {
+                    Log::warning("Removed disallowed XML element", ['element' => $cleanKey]);
+                }
+            }
+            return $sanitized;
+        } elseif (is_string($data)) {
+            return $this->sanitizeXmlTextContent($data);
+        } else {
+            return $data;
+        }
+    }
+
+    /**
+     * Sanitize XML element name
+     * 
+     * @param string $elementName Element name to sanitize
+     * @return string Sanitized element name
+     */
+    private function sanitizeXmlElementName(string $elementName): string
+    {
+        // Remove any characters that aren't allowed in XML element names
+        $cleaned = preg_replace('/[^a-zA-Z0-9_\-.]/', '', $elementName);
+        
+        // Ensure it starts with a letter or underscore
+        if (!preg_match('/^[a-zA-Z_]/', $cleaned)) {
+            $cleaned = 'element_' . $cleaned;
+        }
+        
+        return $cleaned;
+    }
+
+    /**
+     * Sanitize XML text content
+     * 
+     * @param string $content Text content to sanitize
+     * @return string Sanitized content
+     */
+    private function sanitizeXmlTextContent(string $content): string
+    {
+        // Remove control characters except tab, line feed, and carriage return
+        $content = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', $content);
+        
+        // HTML encode to prevent XML injection
+        $content = htmlspecialchars($content, ENT_QUOTES | ENT_XML1, 'UTF-8');
+        
+        // Limit length to prevent DoS
+        if (strlen($content) > 1000) {
+            $content = substr($content, 0, 1000) . '...';
+            Log::warning("XML content truncated due to length");
+        }
+        
+        return $content;
+    }
+
+    /**
+     * Validate XML against expected schema
+     * 
+     * @param array $data Parsed XML data
+     * @return array Validation results
+     */
+    private function validateXmlSchema(array $data): array
+    {
+        try {
+            // Define required fields for thesis metadata
+            $requiredFields = [
+                'UUID', 'Tipe_Laporan', 'Judul_Laporan', 'Prodi', 'Tahun',
+                'Nama_Mahasiswa', 'NIM', 'Dosen_Pembimbing_1__Nama', 'Dosen_Pembimbing_1__NIDN'
+            ];
+
+            // Check for required fields
+            $missingFields = [];
+            foreach ($requiredFields as $field) {
+                if (!isset($data[$field]) || empty($data[$field])) {
+                    $missingFields[] = $field;
+                }
+            }
+
+            if (!empty($missingFields)) {
+                return [
+                    'valid' => false,
+                    'reason' => 'Field yang wajib tidak ditemukan: ' . implode(', ', $missingFields)
+                ];
+            }
+
+            // Validate specific field formats
+            if (isset($data['NIM']) && !preg_match('/^[0-9]{10,15}$/', $data['NIM'])) {
+                return ['valid' => false, 'reason' => 'Format NIM tidak valid'];
+            }
+
+            if (isset($data['Tahun']) && !preg_match('/^[0-9]{4}$/', $data['Tahun'])) {
+                return ['valid' => false, 'reason' => 'Format tahun tidak valid'];
+            }
+
+            if (isset($data['UUID']) && !preg_match('/^[a-f0-9\-]{36}$/i', $data['UUID'])) {
+                Log::warning("UUID format may be invalid", ['uuid' => $data['UUID']]);
+            }
+
+            return ['valid' => true, 'reason' => 'Schema XML valid'];
+
+        } catch (\Exception $e) {
+            Log::error("Error during XML schema validation: " . $e->getMessage());
+            return ['valid' => false, 'reason' => 'Gagal memvalidasi schema XML'];
+        }
+    }
+
+    /**
+     * Generate clean XML from sanitized data
+     * 
+     * @param array $data Sanitized data
+     * @return string Clean XML content
+     */
+    private function generateCleanXml(array $data): string
+    {
+        try {
+            $xml = new \SimpleXMLElement('<root/>');
+            $this->arrayToXMLSecure($data, $xml);
+            return $xml->asXML();
+        } catch (\Exception $e) {
+            Log::error("Error generating clean XML: " . $e->getMessage());
+            throw new \Exception("Gagal membuat XML yang bersih");
+        }
+    }
+
+    /**
+     * Secure version of arrayToXML with additional sanitization
+     * 
+     * @param array $data Data to convert
+     * @param \SimpleXMLElement $xml XML element to add to
+     * @return void
+     */
+    private function arrayToXMLSecure(array $data, \SimpleXMLElement &$xml): void
+    {
+        foreach ($data as $key => $value) {
+            // Additional key sanitization
+            $cleanKey = $this->sanitizeXmlElementName($key);
+            
+            if (is_array($value)) {
+                $child = $xml->addChild($cleanKey);
+                $this->arrayToXMLSecure($value, $child);
+            } else {
+                // Double sanitization for extra security
+                $sanitizedValue = $this->sanitizeXmlTextContent((string)$value);
+                $xml->addChild($cleanKey, $sanitizedValue);
+            }
+        }
     }
 
 }

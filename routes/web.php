@@ -102,6 +102,9 @@ Route::middleware(['auth', 'verified', 'user.type:admin'])->group(function () {
 
     // Daftar Skripsi
     Route::get('/daftar-skripsi', [HomeController::class, 'daftarSkripsi'])->name('admin.daftar.skripsi');
+    
+    // Admin Thesis Status
+    Route::get('/admin/thesis-status', [SignatureController::class, 'adminThesisStatus'])->name('admin.thesis.status');
 });
 
 Route::middleware(['auth', 'verified', 'user.type:mahasiswa'])->group(function () {

@@ -136,6 +136,14 @@
           </a>
         </li>
 
+        <!-- Status Skripsi -->
+        <li class="nav-item">
+          <a href="{{ route('admin.thesis.status') }}" class="nav-link {{ ($title === 'Status Skripsi') ? 'active' : '' }}">
+            <i class="nav-icon fas fa-signature"></i>
+            <p>Status Skripsi</p>
+          </a>
+        </li>
+
         <li class="nav-header">PENGATURAN</li>
         <!-- Pengaturan -->
         <li class="nav-item">

@@ -24,11 +24,13 @@ use setasign\Fpdi\Tcpdf\Fpdi;
 
 // Use the FPDI class that extends TCPDF
 use App\Http\Controllers\SignatureController;
+use App\Http\Traits\PdfSanitizationTrait;
 use Illuminate\Support\Facades\Storage;
 use function Symfony\Component\VarDumper\Dumper\esc;
 
 class ProposalSkripsiController extends Controller
 {
+    use PdfSanitizationTrait;
     public function index()
     {
         $active = TahunAjaran::where('status_aktif', 1)->first();
@@ -78,8 +80,30 @@ class ProposalSkripsiController extends Controller
             return redirect()->back()->with('error', 'File tidak valid atau tidak ada');
         }
 
+        $file = $request->file('file');
+        $user = Mahasiswa::where('user_id', Auth::user()->id)->firstOrFail();
+
+        // **🔒 PDF SANITIZATION FOR STUDENT UPLOAD**
+        $sanitizationResult = $this->sanitizeStudentPdf($file, 'proposal_skripsi', $user->nim);
+        
+        if (!$sanitizationResult['success']) {
+            return redirect()->back()->with('error', 'Upload gagal: ' . $sanitizationResult['error']);
+        }
+
+        // Use sanitized file if available, otherwise use original
+        $fileToStore = $sanitizationResult['sanitized'] ? $sanitizationResult['sanitized_file'] : $sanitizationResult['original_file'];
+        
+        // Log sanitization result
+        if ($sanitizationResult['sanitized']) {
+            \Illuminate\Support\Facades\Log::info("Student proposal PDF was sanitized", [
+                'student_nim' => $user->nim,
+                'original_file' => $file->getClientOriginalName(),
+                'method' => $sanitizationResult['method'] ?? 'unknown'
+            ]);
+        }
+
         try {
-            DB::transaction(function () use ($request) {
+            DB::transaction(function () use ($request, $fileToStore, $sanitizationResult) {
                 $active = TahunAjaran::where('status_aktif', 1)->first();
                 $user = Mahasiswa::where('user_id', Auth::user()->id)->firstOrFail();
                 $form = ProposalSkripsiForm::where('uuid', $request->id_form)->firstOrFail();
@@ -96,8 +120,7 @@ class ProposalSkripsiController extends Controller
                     ->where('program_studi_id', $user->program_studi_id)
                     ->first();
 
-                $file = $request->file('file');
-                $fileNameRandom = $this->getRandomFileName($file);
+                $fileNameRandom = $this->getRandomFileName($fileToStore);
 
                 if ($this->shouldApplyNamingConvention($isPenamaan)) {
                     $this->validateProposalTitle($request->judul_proposal);
@@ -105,16 +128,37 @@ class ProposalSkripsiController extends Controller
 
                     $fileName = $this->generateFileName($isPenamaan->pengaturanDetail->penamaan_proposal, $user, esc($request->judul_proposal));
                 } else {
-                    $fileName = $file->getClientOriginalName();
+                    $fileName = $fileToStore->getClientOriginalName();
                 }
 
-                $this->storeFile($file, $fileNameRandom);
+                $this->storeFile($fileToStore, $fileNameRandom);
 
-                $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $request->judul_proposal_en, $fileName, $fileNameRandom, $file->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
+                $this->createProposalSkripsi($form->id, $user->id, $request->judul_proposal, $request->judul_proposal_en, $fileName, $fileNameRandom, $fileToStore->getClientMimeType(), $pembimbingPertama, $pembimbingKedua);
+
+                // Clean up temporary sanitization files
+                $this->cleanupSanitizationFiles();
             });
 
-            return redirect()->route('proposal.skripsi.pengumpulan')->with('success', 'Berhasil mengupload file');
+            // Prepare success message with sanitization info
+            $successMessage = 'Berhasil mengupload file';
+            if ($sanitizationResult['sanitized']) {
+                $successMessage .= ' (file telah dibersihkan untuk keamanan)';
+            } elseif (isset($sanitizationResult['warnings'])) {
+                $successMessage .= ' (file lolos pemeriksaan keamanan)';
+            }
+
+            $redirect = redirect()->route('proposal.skripsi.pengumpulan')->with('success', $successMessage);
+
+            // Add warnings if any
+            if (isset($sanitizationResult['warnings']) && !empty($sanitizationResult['warnings'])) {
+                $redirect->with('warning', 'Peringatan: ' . implode(', ', $sanitizationResult['warnings']));
+            }
+
+            return $redirect;
+
         } catch (Exception $e) {
+            // Clean up any temporary files on error
+            $this->cleanupSanitizationFiles();
             return redirect()->back()->with('error', 'Gagal mengupload file: ' . $e->getMessage());
         }
     }
