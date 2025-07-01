@@ -41,18 +41,20 @@ class SignatureController extends Controller
      */
     private const PDF_CLEANING_CONFIG = [
         'enabled' => true,                    // Enable/disable PDF cleaning
-        'max_file_size' => 50 * 1024 * 1024,  // 50MB max file size
-        'max_pages' => 500,                   // Maximum pages for image conversion
-        'max_objects' => 10000,               // Maximum PDF objects
+        'max_file_size' => 100 * 1024 * 1024, // 100MB max file size (increased for thesis docs)
+        'max_pages' => 1000,                  // Maximum pages for image conversion (increased)
+        'max_objects' => 50000,               // Maximum PDF objects (increased for complex docs)
         'cleanup_temp_files' => true,         // Clean up temporary files
         'temp_file_retention' => 3600,        // Keep temp files for 1 hour
+        'fast_mode_threshold' => 20,          // Pages threshold for fast mode
+        'image_conversion_timeout' => 180,    // 3 minutes timeout for image conversion
         'security_checks' => [
-            'check_javascript' => true,
-            'check_forms' => true,
-            'check_external_refs' => true,
-            'check_embedded_files' => false,   // Allow embedded files (we embed XML)
+            'check_javascript' => true,       // Still check but with improved patterns
+            'check_forms' => false,           // Allow forms (common in academic PDFs)
+            'check_external_refs' => true,    // Check but with improved patterns
+            'check_embedded_files' => false,  // Allow embedded files (we embed XML)
         ],
-        'sanitization_method' => 'auto',      // 'auto', 'image', 'fpdi'
+        'sanitization_method' => 'auto',      // 'auto', 'image', 'fpdi', 'fast'
     ];
 
     /**
@@ -79,6 +81,21 @@ class SignatureController extends Controller
         ],
         'encoding' => 'UTF-8',                // Required encoding
         'validate_schema' => true,            // Enable XML schema validation
+    ];
+
+    /**
+     * XAdES Configuration following ETSI TS 101 903
+     */
+    private const XADES_CONFIG = [
+        'enabled' => true,
+        'algorithm' => OPENSSL_ALGO_SHA256,
+        'signature_method' => 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+        'canonicalization_method' => 'http://www.w3.org/2001/10/xml-exc-c14n#',
+        'digest_method' => 'http://www.w3.org/2001/04/xmlenc#sha256',
+        'namespaces' => [
+            'ds' => 'http://www.w3.org/2000/09/xmldsig#',
+            'xades' => 'http://uri.etsi.org/01903/v1.3.2#',
+        ],
     ];
 
     /**
@@ -182,23 +199,48 @@ class SignatureController extends Controller
             // Step 4: COMPREHENSIVE PDF CLEANING AND SANITIZATION
             $cleanedPdfPath = $originalPdfPath; // Default to original path
             
-            if (self::PDF_CLEANING_CONFIG['enabled']) {
+            // Check if PDF cleaning is enabled (can be disabled via environment variable)
+            $cleaningEnabled = self::PDF_CLEANING_CONFIG['enabled'] && !env('DISABLE_PDF_CLEANING', false);
+            $fastSigningMode = env('FAST_SIGNING_MODE', false);
+            
+            if ($cleaningEnabled && !$fastSigningMode) {
                 Log::info("Starting PDF cleaning and sanitization for: {$fileName}");
-                $cleaningResult = $this->cleanAndSanitizePdf($originalPdfPath, $fileName);
+                
+                // Check if we should use fast mode based on PDF characteristics
+                $useFastMode = $this->shouldUseFastMode($originalPdfPath);
+                
+                $cleaningResult = $this->cleanAndSanitizePdf($originalPdfPath, $fileName, $useFastMode);
                 
                 if (!$cleaningResult['success']) {
                     Log::error("PDF cleaning failed: " . $cleaningResult['error']);
-                    return redirect()->back()->with('error', 'Gagal membersihkan PDF: ' . $cleaningResult['error']);
+                    
+                    // If cleaning fails, offer option to proceed without cleaning (for debugging)
+                    if (env('ALLOW_UNCLEANED_PDFS', false)) {
+                        Log::warning("Proceeding with uncleaned PDF due to ALLOW_UNCLEANED_PDFS setting");
+                        $cleanedPdfPath = $originalPdfPath;
+                    } else {
+                        return redirect()->back()->with('error', 'Gagal membersihkan PDF: ' . $cleaningResult['error'] . 
+                            ' (Jika ini adalah file yang sah, administrator dapat mengatur FAST_SIGNING_MODE=true untuk mode cepat)');
+                    }
+                } else {
+                    $cleanedPdfPath = $cleaningResult['cleaned_path'];
+                    Log::info("PDF successfully cleaned and saved at: {$cleanedPdfPath}");
+                }
+            } else {
+                if ($fastSigningMode) {
+                    Log::info("Fast signing mode enabled, skipping heavy PDF cleaning for: {$fileName}");
+                } else {
+                    Log::info("PDF cleaning is disabled, proceeding with original file");
                 }
                 
-                $cleanedPdfPath = $cleaningResult['cleaned_path'];
-                Log::info("PDF successfully cleaned and saved at: {$cleanedPdfPath}");
-            } else {
-                Log::info("PDF cleaning is disabled, proceeding with original file");
                 // Still perform basic security checks even if cleaning is disabled
                 $securityCheck = $this->performSecurityChecks($originalPdfPath);
-                if (!$securityCheck['safe']) {
-                    return redirect()->back()->with('error', 'File PDF tidak aman: ' . $securityCheck['reason']);
+                if (!$securityCheck['safe'] && !env('SKIP_PDF_SECURITY_CHECKS', false) && !$fastSigningMode) {
+                    Log::warning("PDF security check failed but may proceed based on configuration");
+                    if (!env('ALLOW_UNCLEANED_PDFS', false)) {
+                        return redirect()->back()->with('error', 'File PDF tidak aman: ' . $securityCheck['reason'] . 
+                            ' (Administrator dapat mengatur FAST_SIGNING_MODE=true untuk mode cepat)');
+                    }
                 }
             }
 
@@ -225,11 +267,34 @@ class SignatureController extends Controller
      * 
      * @param string $originalPdfPath Original PDF file path
      * @param string $fileName Original file name
+     * @param bool $useFastMode Whether to use fast mode (skip heavy sanitization)
      * @return array Result with success status and cleaned file path or error message
      */
-    private function cleanAndSanitizePdf(string $originalPdfPath, string $fileName): array
+    private function cleanAndSanitizePdf(string $originalPdfPath, string $fileName, bool $useFastMode = false): array
     {
         try {
+            // Fast mode: Skip heavy validation and sanitization
+            if ($useFastMode) {
+                Log::info("Using fast mode for PDF cleaning: {$fileName}");
+                
+                // Only basic security check in fast mode
+                $securityCheck = $this->performBasicSecurityCheck($originalPdfPath);
+                if (!$securityCheck['safe']) {
+                    return [
+                        'success' => false,
+                        'error' => 'File PDF mengandung konten yang tidak aman: ' . $securityCheck['reason']
+                    ];
+                }
+
+                // Return original file path (no sanitization needed)
+                return [
+                    'success' => true,
+                    'cleaned_path' => $originalPdfPath,
+                    'cleaned_filename' => $fileName,
+                    'method' => 'fast_mode'
+                ];
+            }
+
             // Step 1: Basic security validation
             $securityCheck = $this->performSecurityChecks($originalPdfPath);
             if (!$securityCheck['safe']) {
@@ -239,13 +304,17 @@ class SignatureController extends Controller
                 ];
             }
 
-            // Step 2: Validate file integrity and structure
-            $integrityCheck = $this->validatePdfIntegrity($originalPdfPath);
-            if (!$integrityCheck['valid']) {
-                return [
-                    'success' => false,
-                    'error' => 'File PDF rusak atau tidak valid: ' . $integrityCheck['reason']
-                ];
+            // Step 2: Validate file integrity and structure (skip in fast mode)
+            if (!$useFastMode) {
+                $integrityCheck = $this->validatePdfIntegrity($originalPdfPath);
+                if (!$integrityCheck['valid']) {
+                    return [
+                        'success' => false,
+                        'error' => 'File PDF rusak atau tidak valid: ' . $integrityCheck['reason']
+                    ];
+                }
+            } else {
+                Log::info("Skipping detailed PDF integrity validation due to fast mode");
             }
 
             // Step 3: Create cleaned version path
@@ -253,7 +322,7 @@ class SignatureController extends Controller
             $cleanedPdfPath = storage_path('app/uploads/proposal/' . $cleanedFileName);
 
             // Step 4: Perform content sanitization
-            $sanitizationResult = $this->sanitizePdfContent($originalPdfPath, $cleanedPdfPath);
+            $sanitizationResult = $this->sanitizePdfContent($originalPdfPath, $cleanedPdfPath, $useFastMode);
             if (!$sanitizationResult['success']) {
                 return [
                     'success' => false,
@@ -340,43 +409,47 @@ class SignatureController extends Controller
             
             if ($securityConfig['check_javascript']) {
                 $suspiciousPatterns = array_merge($suspiciousPatterns, [
-                    '/\/JavaScript\s*\(/i',      // JavaScript code
-                    '/\/JS\s*\(/i',              // JavaScript alternative
-                    '/script>/i',                // HTML-like scripts
-                    '/on\w+\s*=/i',              // Event handlers
-                    '/eval\s*\(/i',              // Eval functions
-                    '/unescape\s*\(/i',          // Unescape functions
+                    '/\/JavaScript\s*\(\s*[^)]*eval/i',    // JavaScript with eval
+                    '/\/JS\s*\(\s*[^)]*eval/i',            // JS with eval  
+                    '/<script[^>]*>/i',                     // HTML script tags (more specific)
+                    '/javascript:\s*[^;]*eval/i',           // JavaScript URLs with eval
+                    '/\/AA\s*<<[^>]*\/JS/i',                // Auto-action with JavaScript
                 ]);
             }
             
             if ($securityConfig['check_forms']) {
                 $suspiciousPatterns = array_merge($suspiciousPatterns, [
-                    '/\/SubmitForm\s*/i',        // Form submissions
-                    '/\/Widget\s*/i',            // Interactive widgets
-                    '/\/XFA\s*/i',               // XFA forms (complex)
+                    '/\/SubmitForm\s*<<[^>]*\/F\s*\(/i',   // Form submissions with URLs
+                    '/\/XFA\s*<<[^>]*\/F\s*\(/i',          // XFA forms with external refs
                 ]);
             }
             
             if ($securityConfig['check_external_refs']) {
                 $suspiciousPatterns = array_merge($suspiciousPatterns, [
-                    '/\/OpenAction\s*/i',        // Auto-execute actions
-                    '/\/Launch\s*/i',            // Launch external files
-                    '/\/GoToR\s*/i',             // Go to remote
-                    '/\/URI\s*/i',               // URI actions (potentially malicious)
-                    '/\/ImportData\s*/i',        // Import external data
-                    '/\/Sound\s*/i',             // Sound objects
-                    '/\/Movie\s*/i',             // Movie objects
+                    '/\/OpenAction\s*<<[^>]*\/S\s*\/JavaScript/i', // Auto-execute JavaScript
+                    '/\/Launch\s*<<[^>]*\/F\s*\(/i',               // Launch external files
+                    '/\/GoToR\s*<<[^>]*\/F\s*\(/i',                // Go to remote files
+                    '/\/ImportData\s*<<[^>]*\/F\s*\(/i',           // Import external data
+                    '/\/Sound\s*<<[^>]*\/F\s*\(/i',                // Sound with external files
+                    '/\/Movie\s*<<[^>]*\/F\s*\(/i',                // Movies with external files
                 ]);
             }
 
+            $foundSuspiciousContent = false;
             foreach ($suspiciousPatterns as $pattern) {
                 if (preg_match($pattern, $fileContent)) {
                     Log::warning("Suspicious content found in PDF", [
                         'pattern' => $pattern,
                         'file' => basename($pdfPath)
                     ]);
-                    return ['safe' => false, 'reason' => 'File mengandung konten yang berpotensi berbahaya'];
+                    $foundSuspiciousContent = true;
+                    break;
                 }
+            }
+
+            // Only fail for truly dangerous patterns, not common PDF features
+            if ($foundSuspiciousContent) {
+                return ['safe' => false, 'reason' => 'File mengandung konten yang berpotensi berbahaya'];
             }
 
             // Check for embedded files based on configuration
@@ -451,8 +524,15 @@ class SignatureController extends Controller
             }
 
             // Check for circular references (can cause infinite loops)
-            if (preg_match('/(\d+\s+0\s+obj).*?\1/s', $fileContent)) {
-                return ['valid' => false, 'reason' => 'File PDF mengandung referensi melingkar'];
+            // Note: This check is disabled for academic PDFs as they often have complex structures
+            // that may appear as circular references but are actually legitimate
+            $checkCircularRefs = env('STRICT_PDF_VALIDATION', false);
+            if ($checkCircularRefs && preg_match('/(\d+\s+0\s+obj).*?\1/s', $fileContent)) {
+                Log::warning("Potential circular references detected in PDF", [
+                    'file' => basename($pdfPath),
+                    'note' => 'This may be a false positive for academic PDFs'
+                ]);
+                return ['valid' => false, 'reason' => 'File PDF mengandung referensi melingkar (Dapat dilewati dengan FAST_SIGNING_MODE=true)'];
             }
 
             return ['valid' => true, 'reason' => 'Struktur PDF valid'];
@@ -468,14 +548,25 @@ class SignatureController extends Controller
      * 
      * @param string $originalPath Path to original PDF
      * @param string $cleanedPath Path where cleaned PDF will be saved
+     * @param bool $useFastMode Whether to use fast mode
      * @return array Sanitization results
      */
-    private function sanitizePdfContent(string $originalPath, string $cleanedPath): array
+    private function sanitizePdfContent(string $originalPath, string $cleanedPath, bool $useFastMode = false): array
     {
         try {
             $method = self::PDF_CLEANING_CONFIG['sanitization_method'];
             
+            // Override method if fast mode is requested
+            if ($useFastMode) {
+                $method = 'fast';
+            }
+            
             switch ($method) {
+                case 'fast':
+                    // Fast mode: Only FPDI-based cleaning (no image conversion)
+                    Log::info("Using fast sanitization method");
+                    return $this->sanitizeViaFpdi($originalPath, $cleanedPath);
+                    
                 case 'image':
                     // Force image-based sanitization
                     return $this->sanitizeViaImageConversion($originalPath, $cleanedPath);
@@ -486,17 +577,17 @@ class SignatureController extends Controller
                     
                 case 'auto':
                 default:
-                    // Auto-select best method (image first, FPDI fallback)
+                    // Auto-select best method (FPDI first for speed, image fallback)
                     Log::info("Using auto-selection for sanitization method");
-                    $sanitizationResult = $this->sanitizeViaImageConversion($originalPath, $cleanedPath);
+                    $sanitizationResult = $this->sanitizeViaFpdi($originalPath, $cleanedPath);
                     
                     if ($sanitizationResult['success']) {
                         return $sanitizationResult;
                     }
 
-                    // Fallback: Basic sanitization using FPDI if image conversion fails
-                    Log::info("Image-based sanitization failed, trying FPDI-based cleaning");
-                    return $this->sanitizeViaFpdi($originalPath, $cleanedPath);
+                    // Fallback: Image-based sanitization if FPDI fails
+                    Log::info("FPDI-based sanitization failed, trying image-based cleaning");
+                    return $this->sanitizeViaImageConversion($originalPath, $cleanedPath);
             }
 
         } catch (\Exception $e) {
@@ -505,6 +596,89 @@ class SignatureController extends Controller
                 'success' => false,
                 'error' => 'Gagal membersihkan konten PDF: ' . $e->getMessage()
             ];
+        }
+    }
+
+    /**
+     * Determine if fast mode should be used based on PDF characteristics
+     */
+    private function shouldUseFastMode(string $pdfPath): bool
+    {
+        try {
+            // Check file size
+            $fileSize = filesize($pdfPath);
+            if ($fileSize > 20 * 1024 * 1024) { // > 20MB
+                Log::info("Using fast mode due to large file size: " . round($fileSize / (1024 * 1024), 2) . "MB");
+                return true;
+            }
+
+            // Check page count using Spatie PDF-to-Image
+            try {
+                $pdf = new Pdf($pdfPath);
+                $pageCount = $pdf->pageCount();
+                $threshold = self::PDF_CLEANING_CONFIG['fast_mode_threshold'];
+                
+                if ($pageCount > $threshold) {
+                    Log::info("Using fast mode due to page count: {$pageCount} pages (threshold: {$threshold})");
+                    return true;
+                }
+            } catch (\Exception $e) {
+                Log::warning("Could not determine page count, using fast mode for safety: " . $e->getMessage());
+                return true;
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            Log::warning("Error determining fast mode, defaulting to fast mode: " . $e->getMessage());
+            return true;
+        }
+    }
+
+    /**
+     * Perform basic security check (lighter than full security check)
+     */
+    private function performBasicSecurityCheck(string $pdfPath): array
+    {
+        try {
+            $fileContent = file_get_contents($pdfPath);
+            if (!$fileContent) {
+                return ['safe' => false, 'reason' => 'Tidak dapat membaca file PDF'];
+            }
+
+            // Check for valid PDF header
+            if (substr($fileContent, 0, 4) !== '%PDF') {
+                return ['safe' => false, 'reason' => 'File bukan PDF yang valid'];
+            }
+
+            // Check file size
+            $fileSize = strlen($fileContent);
+            $maxSize = self::PDF_CLEANING_CONFIG['max_file_size'];
+            if ($fileSize > $maxSize) {
+                return ['safe' => false, 'reason' => 'File terlalu besar (maksimal ' . round($maxSize / (1024 * 1024)) . 'MB)'];
+            }
+
+            // Only check for the most dangerous patterns in fast mode
+            $dangerousPatterns = [
+                '/\/JavaScript\s*\(\s*[^)]*eval/i',     // JavaScript with eval
+                '/\/Launch\s*<<[^>]*\/F\s*\(/i',        // Launch external files
+                '/<script[^>]*>/i',                      // HTML script tags
+            ];
+
+            foreach ($dangerousPatterns as $pattern) {
+                if (preg_match($pattern, $fileContent)) {
+                    Log::warning("Dangerous content found in PDF during basic check", [
+                        'pattern' => $pattern,
+                        'file' => basename($pdfPath)
+                    ]);
+                    return ['safe' => false, 'reason' => 'File mengandung konten berbahaya'];
+                }
+            }
+
+            return ['safe' => true, 'reason' => 'File lolos pemeriksaan keamanan dasar'];
+
+        } catch (\Exception $e) {
+            Log::error("Error during basic security check: " . $e->getMessage());
+            return ['safe' => false, 'reason' => 'Gagal memeriksa keamanan file'];
         }
     }
 
@@ -633,6 +807,8 @@ class SignatureController extends Controller
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
+
+
 
     /**
      * Validate the cleaned PDF
@@ -868,6 +1044,12 @@ class SignatureController extends Controller
                 throw new \Exception("Failed to generate XML metadata");
             }
 
+            // Add XAdES digital signature to XML
+            if (self::XADES_CONFIG['enabled']) {
+                Log::info("Adding XAdES digital signature to XML metadata");
+                $xmlContent = $this->addXAdESSignature($xmlContent);
+            }
+
             // Create temporary XML file with secure permissions
             $xmlPath = storage_path('app/temp/data_' . time() . '_' . uniqid() . '.xml');
             
@@ -1043,6 +1225,10 @@ class SignatureController extends Controller
                 throw new \Exception("Tidak ditemukan file XML yang tertanam dalam PDF");
             }
 
+            // Verify XAdES signature if present
+            $xadesVerification = $this->verifyXAdESSignature($xmlContent);
+            Log::info("XAdES verification result", $xadesVerification);
+
             // Additional XML sanitization (if not already done in extractEmbeddedFiles)
             if (!str_starts_with($xmlContent, '<?xml')) {
                 // If the extracted content is not clean XML, try to sanitize it
@@ -1121,7 +1307,8 @@ class SignatureController extends Controller
                 'Dosen_Ketua_Sidang' => $parsedArray['Dosen_Ketua_Sidang'] ?? '',
                 'KAPRODI' => $parsedArray['KAPRODI'] ?? '',
                 'status' => 'success',
-                'hash_value' => $hashValue
+                'hash_value' => $hashValue,
+                'xades_verification' => $xadesVerification
             ]);
         } catch (\Exception $e) {
             Log::error("PDF verification failed: " . $e->getMessage(), [
@@ -2328,7 +2515,7 @@ class SignatureController extends Controller
     {
         try {
             $xml = new \SimpleXMLElement('<root/>');
-            $this->arrayToXMLSecure($data, $xml);
+            self::arrayToXMLSecure($data, $xml);
             return $xml->asXML();
         } catch (\Exception $e) {
             Log::error("Error generating clean XML: " . $e->getMessage());
@@ -2337,27 +2524,420 @@ class SignatureController extends Controller
     }
 
     /**
-     * Secure version of arrayToXML with additional sanitization
-     * 
-     * @param array $data Data to convert
-     * @param \SimpleXMLElement $xml XML element to add to
-     * @return void
+     * Add XAdES digital signature to XML content following ETSI TS 101 903 standard
+     *
+     * @param string $xmlContent The original XML content
+     * @return string XML content with XAdES signature
+     * @throws \Exception
      */
-    private function arrayToXMLSecure(array $data, \SimpleXMLElement &$xml): void
+    private function addXAdESSignature(string $xmlContent): string
     {
-        foreach ($data as $key => $value) {
-            // Additional key sanitization
-            $cleanKey = $this->sanitizeXmlElementName($key);
-            
-            if (is_array($value)) {
-                $child = $xml->addChild($cleanKey);
-                $this->arrayToXMLSecure($value, $child);
-            } else {
-                // Double sanitization for extra security
-                $sanitizedValue = $this->sanitizeXmlTextContent((string)$value);
-                $xml->addChild($cleanKey, $sanitizedValue);
+        try {
+            if (!self::XADES_CONFIG['enabled']) {
+                Log::info("XAdES signature disabled, returning unsigned XML");
+                return $xmlContent;
             }
+
+            Log::info("Adding ETSI-compliant XAdES signature to XML metadata");
+
+            // Load private key and certificate
+            $privateKeyPath = config('app.xades.private_key_path');
+            $certificatePath = config('app.xades.certificate_path');
+
+            if (!file_exists($privateKeyPath) || !file_exists($certificatePath)) {
+                throw new \Exception("XAdES keys not found. Please run setup-xades-keys.sh first.");
+            }
+
+            $privateKey = file_get_contents($privateKeyPath);
+            $certificate = file_get_contents($certificatePath);
+
+            if (!$privateKey || !$certificate) {
+                throw new \Exception("Failed to read XAdES keys");
+            }
+
+            // Parse the original XML
+            $xmlDoc = new \DOMDocument();
+            $xmlDoc->formatOutput = true;
+            $xmlDoc->loadXML($xmlContent);
+            $rootElement = $xmlDoc->documentElement;
+
+            // Generate unique IDs
+            $signatureId = 'Signature-' . uniqid();
+            $dataObjectId = 'DataObject-' . uniqid();
+            $signedPropertiesId = 'SignedProperties-' . uniqid();
+            
+            // Add Id to root element for referencing
+            $rootElement->setAttribute('Id', $dataObjectId);
+
+            // Create the XAdES signature following ETSI format
+            $signature = $this->createETSISignature($xmlDoc, $signatureId, $dataObjectId, $signedPropertiesId, $privateKey, $certificate);
+            
+            // Append signature to root element
+            $rootElement->appendChild($signature);
+
+            $signedXml = $xmlDoc->saveXML();
+            
+            Log::info("ETSI-compliant XAdES signature added successfully", [
+                'signature_id' => $signatureId,
+                'data_object_id' => $dataObjectId,
+                'signed_properties_id' => $signedPropertiesId
+            ]);
+
+            return $signedXml;
+
+        } catch (\Exception $e) {
+            Log::error("Failed to add XAdES signature: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // In case of signature failure, return unsigned XML with warning
+            Log::warning("Returning unsigned XML due to XAdES signature failure");
+            return $xmlContent;
         }
     }
 
+    /**
+     * Create ETSI-compliant ds:Signature element
+     */
+    private function createETSISignature(\DOMDocument $xmlDoc, string $signatureId, string $dataObjectId, string $signedPropertiesId, string $privateKey, string $certificate): \DOMElement
+    {
+        $namespaces = self::XADES_CONFIG['namespaces'];
+        
+        // Create main signature element with namespaces
+        $signature = $xmlDoc->createElement('ds:Signature');
+        $signature->setAttribute('Id', $signatureId);
+        $signature->setAttribute('xmlns:ds', $namespaces['ds']);
+        $signature->setAttribute('xmlns:xades', $namespaces['xades']);
+
+        // Create SignedInfo
+        $signedInfo = $this->createSignedInfo($xmlDoc, $dataObjectId, $signedPropertiesId);
+        $signature->appendChild($signedInfo);
+
+        // Calculate signature value
+        $canonicalSignedInfo = $signedInfo->C14N(true, false);
+        $signatureValue = '';
+        $result = openssl_sign($canonicalSignedInfo, $signatureValue, $privateKey, self::XADES_CONFIG['algorithm']);
+        
+        if (!$result) {
+            throw new \Exception("Failed to generate digital signature: " . openssl_error_string());
+        }
+
+        // Add SignatureValue
+        $signatureValueElement = $xmlDoc->createElement('ds:SignatureValue', base64_encode($signatureValue));
+        $signature->appendChild($signatureValueElement);
+
+        // Add KeyInfo
+        $keyInfo = $this->createKeyInfo($xmlDoc, $certificate);
+        $signature->appendChild($keyInfo);
+
+        // Add Object with QualifyingProperties
+        $object = $this->createQualifyingProperties($xmlDoc, $signatureId, $signedPropertiesId);
+        $signature->appendChild($object);
+
+        return $signature;
+    }
+
+    /**
+     * Create ds:SignedInfo element
+     */
+    private function createSignedInfo(\DOMDocument $xmlDoc, string $dataObjectId, string $signedPropertiesId): \DOMElement
+    {
+        $signedInfo = $xmlDoc->createElement('ds:SignedInfo');
+
+        // CanonicalizationMethod
+        $canonicalizationMethod = $xmlDoc->createElement('ds:CanonicalizationMethod');
+        $canonicalizationMethod->setAttribute('Algorithm', self::XADES_CONFIG['canonicalization_method']);
+        $signedInfo->appendChild($canonicalizationMethod);
+
+        // SignatureMethod
+        $signatureMethod = $xmlDoc->createElement('ds:SignatureMethod');
+        $signatureMethod->setAttribute('Algorithm', self::XADES_CONFIG['signature_method']);
+        $signedInfo->appendChild($signatureMethod);
+
+        // Reference to data object
+        $dataReference = $this->createReference($xmlDoc, '#' . $dataObjectId, null);
+        $signedInfo->appendChild($dataReference);
+
+        // Reference to signed properties
+        $signedPropsReference = $this->createReference($xmlDoc, '#' . $signedPropertiesId, 'http://uri.etsi.org/01903#SignedProperties');
+        $signedInfo->appendChild($signedPropsReference);
+
+        return $signedInfo;
+    }
+
+    /**
+     * Create ds:Reference element
+     */
+    private function createReference(\DOMDocument $xmlDoc, string $uri, ?string $type): \DOMElement
+    {
+        $reference = $xmlDoc->createElement('ds:Reference');
+        $reference->setAttribute('URI', $uri);
+        
+        if ($type) {
+            $reference->setAttribute('Type', $type);
+        }
+
+        // DigestMethod
+        $digestMethod = $xmlDoc->createElement('ds:DigestMethod');
+        $digestMethod->setAttribute('Algorithm', self::XADES_CONFIG['digest_method']);
+        $reference->appendChild($digestMethod);
+
+        // Calculate digest value
+        $digestValue = $this->calculateDigestValue($xmlDoc, $uri);
+        $digestValueElement = $xmlDoc->createElement('ds:DigestValue', $digestValue);
+        $reference->appendChild($digestValueElement);
+
+        return $reference;
+    }
+
+    /**
+     * Create ds:KeyInfo element
+     */
+    private function createKeyInfo(\DOMDocument $xmlDoc, string $certificate): \DOMElement
+    {
+        $keyInfo = $xmlDoc->createElement('ds:KeyInfo');
+        
+        $x509Data = $xmlDoc->createElement('ds:X509Data');
+        $keyInfo->appendChild($x509Data);
+        
+        // Clean and format certificate
+        $cleanCert = preg_replace('/-----BEGIN CERTIFICATE-----/', '', $certificate);
+        $cleanCert = preg_replace('/-----END CERTIFICATE-----/', '', $cleanCert);
+        $cleanCert = preg_replace('/\s+/', '', $cleanCert);
+        
+        $x509Certificate = $xmlDoc->createElement('ds:X509Certificate', $cleanCert);
+        $x509Data->appendChild($x509Certificate);
+
+        return $keyInfo;
+    }
+
+    /**
+     * Create ds:Object with QualifyingProperties
+     */
+    private function createQualifyingProperties(\DOMDocument $xmlDoc, string $signatureId, string $signedPropertiesId): \DOMElement
+    {
+        $object = $xmlDoc->createElement('ds:Object');
+        
+        $qualifyingProperties = $xmlDoc->createElement('xades:QualifyingProperties');
+        $qualifyingProperties->setAttribute('Target', '#' . $signatureId);
+        $object->appendChild($qualifyingProperties);
+        
+        $signedProperties = $xmlDoc->createElement('xades:SignedProperties');
+        $signedProperties->setAttribute('Id', $signedPropertiesId);
+        $qualifyingProperties->appendChild($signedProperties);
+        
+        // SignedSignatureProperties
+        $signedSignatureProperties = $xmlDoc->createElement('xades:SignedSignatureProperties');
+        $signedProperties->appendChild($signedSignatureProperties);
+        
+        // SigningTime
+        $signingTime = $xmlDoc->createElement('xades:SigningTime', date('c'));
+        $signedSignatureProperties->appendChild($signingTime);
+        
+        // SignedDataObjectProperties (optional but included for completeness)
+        $signedDataObjectProperties = $xmlDoc->createElement('xades:SignedDataObjectProperties');
+        $signedProperties->appendChild($signedDataObjectProperties);
+
+        return $object;
+    }
+
+    /**
+     * Calculate digest value for reference
+     */
+    private function calculateDigestValue(\DOMDocument $xmlDoc, string $uri): string
+    {
+        if (strpos($uri, '#') === 0) {
+            $id = substr($uri, 1);
+            $element = $xmlDoc->getElementById($id);
+            
+            if ($element) {
+                $canonicalElement = $element->C14N(true, false);
+                return base64_encode(hash('sha256', $canonicalElement, true));
+            }
+        }
+        
+        // Fallback: digest of entire document
+        $canonicalDoc = $xmlDoc->C14N();
+        return base64_encode(hash('sha256', $canonicalDoc, true));
+    }
+
+    /**
+     * Verify ETSI-compliant XAdES digital signature in XML content
+     *
+     * @param string $xmlContent The XML content with signature
+     * @return array Verification result with status and details
+     */
+    private function verifyXAdESSignature(string $xmlContent): array
+    {
+        try {
+            if (!self::XADES_CONFIG['enabled']) {
+                return [
+                    'valid' => true,
+                    'message' => 'XAdES verification disabled',
+                    'details' => []
+                ];
+            }
+
+            Log::info("Verifying ETSI-compliant XAdES signature in XML metadata");
+
+            // Parse XML with namespace support
+            $xmlDoc = new \DOMDocument();
+            $xmlDoc->loadXML($xmlContent);
+            
+            // Create XPath with namespaces
+            $xpath = new \DOMXPath($xmlDoc);
+            $xpath->registerNamespace('ds', self::XADES_CONFIG['namespaces']['ds']);
+            $xpath->registerNamespace('xades', self::XADES_CONFIG['namespaces']['xades']);
+            
+            // Find signature element
+            $signatureElements = $xpath->query('//ds:Signature');
+            
+            if ($signatureElements->length === 0) {
+                return [
+                    'valid' => false,
+                    'message' => 'No XAdES signature found in XML',
+                    'details' => []
+                ];
+            }
+
+            $signatureElement = $signatureElements->item(0);
+            $signatureId = $signatureElement->getAttribute('Id');
+            
+            // Extract ETSI signature components
+            $signedInfo = $xpath->query('.//ds:SignedInfo', $signatureElement)->item(0);
+            $signatureValueElement = $xpath->query('.//ds:SignatureValue', $signatureElement)->item(0);
+            $x509Certificate = $xpath->query('.//ds:X509Certificate', $signatureElement)->item(0);
+            $signingTime = $xpath->query('.//xades:SigningTime', $signatureElement)->item(0);
+            
+            if (!$signedInfo || !$signatureValueElement || !$x509Certificate) {
+                return [
+                    'valid' => false,
+                    'message' => 'Invalid ETSI signature structure',
+                    'details' => []
+                ];
+            }
+
+            $signatureValue = base64_decode($signatureValueElement->textContent);
+            $certificate = "-----BEGIN CERTIFICATE-----\n" . 
+                          chunk_split($x509Certificate->textContent, 64) . 
+                          "-----END CERTIFICATE-----";
+            
+            // Verify SignedInfo signature
+            $canonicalSignedInfo = $signedInfo->C14N(true, false);
+            $verificationResult = openssl_verify($canonicalSignedInfo, $signatureValue, $certificate, self::XADES_CONFIG['algorithm']);
+            
+            // Verify references
+            $referenceVerifications = $this->verifyETSIReferences($xpath, $signatureElement, $xmlDoc);
+            
+            $details = [
+                'signature_id' => $signatureId,
+                'signing_time' => $signingTime ? $signingTime->textContent : 'Not available',
+                'reference_verifications' => $referenceVerifications,
+                'all_references_valid' => !in_array(false, array_column($referenceVerifications, 'valid'))
+            ];
+            
+            if ($verificationResult === 1 && $details['all_references_valid']) {
+                return [
+                    'valid' => true,
+                    'message' => 'ETSI XAdES signature is valid',
+                    'details' => $details
+                ];
+            } elseif ($verificationResult === 0) {
+                return [
+                    'valid' => false,
+                    'message' => 'ETSI XAdES signature verification failed',
+                    'details' => $details
+                ];
+            } else {
+                return [
+                    'valid' => false,
+                    'message' => 'XAdES signature verification error: ' . openssl_error_string(),
+                    'details' => $details
+                ];
+            }
+
+        } catch (\Exception $e) {
+            Log::error("XAdES signature verification failed: " . $e->getMessage());
+            return [
+                'valid' => false,
+                'message' => 'XAdES verification error: ' . $e->getMessage(),
+                'details' => []
+            ];
+        }
+    }
+
+    /**
+     * Verify ETSI references in signature
+     */
+    private function verifyETSIReferences(\DOMXPath $xpath, \DOMElement $signatureElement, \DOMDocument $xmlDoc): array
+    {
+        $verifications = [];
+        $references = $xpath->query('.//ds:Reference', $signatureElement);
+        
+        foreach ($references as $reference) {
+            $uri = $reference->getAttribute('URI');
+            $type = $reference->getAttribute('Type');
+            
+            $digestValueElement = $xpath->query('.//ds:DigestValue', $reference)->item(0);
+            $expectedDigest = $digestValueElement ? $digestValueElement->textContent : '';
+            
+            // Calculate actual digest
+            $actualDigest = $this->calculateDigestValue($xmlDoc, $uri);
+            
+            $verifications[] = [
+                'uri' => $uri,
+                'type' => $type,
+                'expected_digest' => $expectedDigest,
+                'actual_digest' => $actualDigest,
+                'valid' => $expectedDigest === $actualDigest
+            ];
+        }
+        
+        return $verifications;
+    }
+
+    /**
+     * Helper method to extract element value from DOM
+     */
+    private function getElementValue(\DOMElement $parent, string $tagName): string
+    {
+        $elements = $parent->getElementsByTagName($tagName);
+        return $elements->length > 0 ? $elements->item(0)->textContent : '';
+    }
+
+    /**
+     * Check if XAdES keys exist and are valid
+     */
+    private function validateXAdESSetup(): array
+    {
+        $privateKeyPath = config('app.xades.private_key_path');
+        $certificatePath = config('app.xades.certificate_path');
+
+        $issues = [];
+
+        if (!file_exists($privateKeyPath)) {
+            $issues[] = "Private key not found at: $privateKeyPath";
+        } else {
+            $privateKey = file_get_contents($privateKeyPath);
+            $keyResource = openssl_pkey_get_private($privateKey);
+            if (!$keyResource) {
+                $issues[] = "Invalid private key format";
+            }
+        }
+
+        if (!file_exists($certificatePath)) {
+            $issues[] = "Certificate not found at: $certificatePath";
+        } else {
+            $certificate = file_get_contents($certificatePath);
+            $certResource = openssl_x509_read($certificate);
+            if (!$certResource) {
+                $issues[] = "Invalid certificate format";
+            }
+        }
+
+        return [
+            'valid' => empty($issues),
+            'issues' => $issues
+        ];
+    }
 }

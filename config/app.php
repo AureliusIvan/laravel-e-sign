@@ -123,4 +123,26 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | XAdES Digital Signature Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for XAdES (XML Advanced Electronic Signatures) functionality
+    | used for digital signing of thesis documents.
+    |
+    */
+    'xades' => [
+        'enabled' => env('XADES_ENABLED', true),
+        'private_key_path' => storage_path('app/keys/system_private.key'),
+        'certificate_path' => storage_path('app/keys/system_cert.crt'),
+        'key_size' => 2048,
+        'certificate_days' => 3650, // 10 years
+        'organization' => 'Universitas Multimedia Nusantara',
+        'country' => 'ID',
+        'state' => 'Banten',
+        'city' => 'Tangerang',
+        'algorithm' => OPENSSL_ALGO_SHA256,
+    ],
+
 ];
